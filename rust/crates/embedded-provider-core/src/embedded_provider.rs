@@ -5,6 +5,7 @@
 
 use phantom_base64url::base64url_encode;
 use phantom_client::{PhantomClient, PhantomClientConfig};
+use phantom_sdk_types::StamperWithKeyManagement;
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
     ParsedTransactionResult,
@@ -730,7 +731,7 @@ impl EmbeddedProvider {
 
         // Ensure stamper is initialized
         let stamper = self.platform.stamper();
-        if stamper.get_key_info().is_none() {
+        if StamperWithKeyManagement::get_key_info(stamper).is_none() {
             stamper.init().await?;
         }
 

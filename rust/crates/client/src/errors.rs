@@ -105,6 +105,14 @@ pub fn get_error_message(error: &ClientError, fallback_message: &str) -> String 
     }
 }
 
+/// Extract typed error data from a reqwest error response body.
+///
+/// Equivalent to the TS `getAxiosErrorData<T>(error)` function.
+/// Attempts to deserialize the error body as type `T`.
+pub fn get_error_data<T: serde::de::DeserializeOwned>(body: &str) -> Option<T> {
+    serde_json::from_str(body).ok()
+}
+
 /// Parse a prepare error response into a typed wallet service error.
 ///
 /// Returns `None` if the response doesn't contain a recognized error type.

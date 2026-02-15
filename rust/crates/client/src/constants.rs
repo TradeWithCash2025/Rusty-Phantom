@@ -106,6 +106,17 @@ pub fn get_derivation_path_for_network(network_id: &str, account_index: u32) -> 
     }
 }
 
+/// Get network configuration with derivation index.
+///
+/// Deprecated: use [`get_client_network_config()`] instead.
+#[deprecated(note = "Use get_client_network_config instead")]
+pub fn get_network_config_with_index(
+    network_id: &str,
+    derivation_index: u32,
+) -> Option<ClientNetworkConfig> {
+    get_client_network_config(network_id, derivation_index)
+}
+
 /// Get complete network configuration for a given network ID and account index.
 ///
 /// Returns `None` if the network is not supported.

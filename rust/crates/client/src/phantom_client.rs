@@ -77,10 +77,14 @@ impl PhantomClient {
     }
 
     /// Get the authenticator public key from the stamper, if available.
+    ///
+    /// Checks if the stamper supports key management by calling `get_key_info()`.
+    /// This mirrors the TS `"getKeyInfo" in this.stamper` duck-type check.
     fn get_authenticator_public_key(&self) -> Option<String> {
-        // If the stamper supports key info retrieval, get the public key
-        // This is checked at runtime since Stamper trait doesn't include getKeyInfo
-        None // Stamper trait doesn't expose getKeyInfo in the base trait
+        self.stamper
+            .as_ref()
+            .and_then(|s| s.get_key_info())
+            .map(|info| info.public_key)
     }
 
     /// Create a new wallet.

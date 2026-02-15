@@ -25,7 +25,7 @@ pub use types::{
 };
 
 // Re-export errors
-pub use errors::{ClientError, WalletServiceError};
+pub use errors::{get_error_data, ClientError, WalletServiceError};
 
 // Re-export constants
 pub use constants::{
@@ -39,5 +39,7 @@ pub use caip2_mappings::{
     get_supported_network_ids, supports_transaction_submission,
 };
 
-// Re-export from dependencies
+// Re-export from dependencies for convenience (matches TS re-exports)
 pub use phantom_constants::NetworkId;
+pub use phantom_crypto::{generate_key_pair, Keypair as CryptoKeypair};
+pub use phantom_utils::random_uuid;

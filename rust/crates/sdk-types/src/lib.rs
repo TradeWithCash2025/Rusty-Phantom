@@ -62,6 +62,14 @@ pub trait Stamper: Send + Sync {
     fn salt(&self) -> Option<&str> {
         None
     }
+
+    /// Get key info if this stamper supports key management.
+    ///
+    /// Default returns `None`. Override in stampers that implement
+    /// `StamperWithKeyManagement` to return the current key info.
+    fn get_key_info(&self) -> Option<StamperKeyInfo> {
+        None
+    }
 }
 
 /// Key information structure returned by stampers.

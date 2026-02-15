@@ -1,0 +1,12 @@
+[package]
+name = "phantom-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ed25519 cryptographic operations for the Phantom Connect SDK"
+
+[dependencies]
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+bs58 = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,8 @@
+[package]
+name = "phantom-sdk-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared SDK type definitions for Phantom"
+
+[dependencies]

@@ -1,0 +1,8 @@
+[package]
+name = "phantom-embedded-provider-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core embedded provider functionality for Phantom"
+
+[dependencies]

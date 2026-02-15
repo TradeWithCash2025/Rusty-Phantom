@@ -1,0 +1,8 @@
+[package]
+name = "phantom-chain-interfaces"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Blockchain chain interface abstractions for Phantom"
+
+[dependencies]

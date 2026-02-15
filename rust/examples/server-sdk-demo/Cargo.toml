@@ -1,0 +1,12 @@
+[package]
+name = "phantom-server-sdk-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Demo server SDK application for Phantom"
+
+[[bin]]
+name = "phantom-server-sdk-demo"
+path = "src/main.rs"
+
+[dependencies]

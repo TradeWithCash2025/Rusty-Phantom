@@ -1,0 +1,10 @@
+[package]
+name = "phantom-base64url"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Base64url encoding/decoding utilities for the Phantom Connect SDK"
+
+[dependencies]
+base64 = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,8 @@
+[package]
+name = "phantom-api-key-stamper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "API key stamper for Phantom request authentication"
+
+[dependencies]

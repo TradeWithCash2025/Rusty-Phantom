@@ -1,0 +1,8 @@
+[package]
+name = "phantom-browser-injected-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Browser-injected SDK for Phantom wallet integration"
+
+[dependencies]

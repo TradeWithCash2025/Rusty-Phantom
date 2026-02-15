@@ -1,0 +1,8 @@
+[package]
+name = "phantom-indexed-db-stamper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "IndexedDB-backed stamper for Phantom browser environments"
+
+[dependencies]

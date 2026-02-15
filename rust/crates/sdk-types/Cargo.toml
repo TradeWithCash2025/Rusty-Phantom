@@ -6,3 +6,6 @@ license.workspace = true
 description = "Shared SDK type definitions for Phantom"
 
 [dependencies]
+serde = { workspace = true }
+async-trait = { workspace = true }
+phantom-constants = { workspace = true }

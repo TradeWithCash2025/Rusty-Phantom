@@ -6,3 +6,11 @@ license.workspace = true
 description = "API key stamper for Phantom request authentication"
 
 [dependencies]
+phantom-base64url = { workspace = true }
+phantom-crypto = { workspace = true }
+phantom-sdk-types = { workspace = true }
+phantom-constants = { workspace = true }
+bs58 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }

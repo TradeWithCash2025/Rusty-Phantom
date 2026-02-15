@@ -487,3 +487,119 @@ pub fn internal_caip_to_network_id(
         .map(|(id, _)| *id)
         .ok_or(NetworkError::NoNetworkIdMapping(internal_caip))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn solana_mainnet_config() {
+        let config = get_network_config(NetworkId::SolanaMainnet).unwrap();
+        assert_eq!(config.chain, "solana");
+        assert_eq!(config.network, "mainnet");
+        assert_eq!(config.name, "Solana Mainnet");
+    }
+
+    #[test]
+    fn ethereum_mainnet_config() {
+        let config = get_network_config(NetworkId::EthereumMainnet).unwrap();
+        assert_eq!(config.chain, "ethereum");
+        assert_eq!(config.network, "mainnet");
+    }
+
+    #[test]
+    fn all_networks_have_explorers() {
+        for (_, config) in NETWORK_CONFIGS.iter() {
+            let explorer = config.explorer.as_ref().expect(&format!(
+                "Network {} should have explorer",
+                config.name
+            ));
+            assert!(
+                explorer.transaction_url.contains("{hash}"),
+                "transaction_url for {} should contain {{hash}}",
+                config.name
+            );
+            assert!(
+                explorer.address_url.contains("{address}"),
+                "address_url for {} should contain {{address}}",
+                config.name
+            );
+        }
+    }
+
+    #[test]
+    fn get_explorer_url_transaction() {
+        let url = get_explorer_url(
+            NetworkId::SolanaMainnet,
+            ExplorerUrlType::Transaction,
+            "test-hash",
+        );
+        assert_eq!(url, Some("https://solscan.io/tx/test-hash".to_string()));
+    }
+
+    #[test]
+    fn get_explorer_url_address() {
+        let url = get_explorer_url(
+            NetworkId::EthereumMainnet,
+            ExplorerUrlType::Address,
+            "0x123456",
+        );
+        assert_eq!(
+            url,
+            Some("https://etherscan.io/address/0x123456".to_string())
+        );
+    }
+
+    #[test]
+    fn get_supported_networks_not_empty() {
+        let networks = get_supported_networks();
+        assert!(!networks.is_empty());
+        assert!(networks.contains(&NetworkId::SolanaMainnet));
+        assert!(networks.contains(&NetworkId::EthereumMainnet));
+    }
+
+    #[test]
+    fn get_networks_by_chain_solana() {
+        let solana = get_networks_by_chain("solana");
+        assert!(solana.contains(&NetworkId::SolanaMainnet));
+        assert!(solana.contains(&NetworkId::SolanaDevnet));
+        // Verify all returned are actually solana
+        for id in &solana {
+            let config = get_network_config(*id).unwrap();
+            assert_eq!(config.chain, "solana");
+        }
+    }
+
+    #[test]
+    fn get_networks_by_chain_ethereum() {
+        let eth = get_networks_by_chain("ethereum");
+        assert!(eth.contains(&NetworkId::EthereumMainnet));
+        assert!(eth.contains(&NetworkId::EthereumSepolia));
+    }
+
+    #[test]
+    fn get_networks_by_chain_unsupported() {
+        let networks = get_networks_by_chain("unsupported-chain");
+        assert!(networks.is_empty());
+    }
+
+    #[test]
+    fn chain_id_roundtrip() {
+        assert_eq!(
+            chain_id_to_network_id(1),
+            Some(NetworkId::EthereumMainnet)
+        );
+        assert_eq!(
+            network_id_to_chain_id(NetworkId::EthereumMainnet),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn solana_has_no_chain_id() {
+        assert_eq!(
+            network_id_to_chain_id(NetworkId::SolanaMainnet),
+            None
+        );
+    }
+}

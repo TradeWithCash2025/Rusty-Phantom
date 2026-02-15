@@ -116,3 +116,104 @@ pub enum SecretKeyInput<'a> {
     /// Raw secret key bytes.
     Bytes(&'a [u8]),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+    #[test]
+    fn generate_key_pair_returns_valid_keys() {
+        let kp = generate_key_pair();
+        let pk_bytes = bs58::decode(&kp.public_key).into_vec().unwrap();
+        let sk_bytes = bs58::decode(&kp.secret_key).into_vec().unwrap();
+        assert_eq!(pk_bytes.len(), 32);
+        assert_eq!(sk_bytes.len(), 64);
+    }
+
+    #[test]
+    fn generate_key_pair_returns_unique_keys() {
+        let kp1 = generate_key_pair();
+        let kp2 = generate_key_pair();
+        assert_ne!(kp1.public_key, kp2.public_key);
+        assert_ne!(kp1.secret_key, kp2.secret_key);
+    }
+
+    #[test]
+    fn create_key_pair_from_secret_roundtrip() {
+        let original = generate_key_pair();
+        let recreated = create_key_pair_from_secret(&original.secret_key).unwrap();
+        assert_eq!(recreated.public_key, original.public_key);
+        assert_eq!(recreated.secret_key, original.secret_key);
+    }
+
+    #[test]
+    fn create_key_pair_from_secret_invalid() {
+        assert!(create_key_pair_from_secret("invalid-key").is_err());
+    }
+
+    fn verify_signature(public_key: &str, message: &[u8], sig_bytes: &[u8]) -> bool {
+        let pk_bytes = bs58::decode(public_key).into_vec().unwrap();
+        let vk = VerifyingKey::from_bytes(pk_bytes.as_slice().try_into().unwrap()).unwrap();
+        let sig = Signature::from_bytes(sig_bytes.try_into().unwrap());
+        vk.verify(message, &sig).is_ok()
+    }
+
+    #[test]
+    fn sign_with_base58_key() {
+        let kp = generate_key_pair();
+        let msg = b"Hello, World!";
+        let sig = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), msg).unwrap();
+        assert_eq!(sig.len(), 64);
+        assert!(verify_signature(&kp.public_key, msg, &sig));
+    }
+
+    #[test]
+    fn sign_with_raw_bytes() {
+        let kp = generate_key_pair();
+        let sk_bytes = bs58::decode(&kp.secret_key).into_vec().unwrap();
+        let msg = b"test with raw secret key";
+        let sig = sign_with_secret(&SecretKeyInput::Bytes(&sk_bytes), msg).unwrap();
+        assert_eq!(sig.len(), 64);
+        assert!(verify_signature(&kp.public_key, msg, &sig));
+    }
+
+    #[test]
+    fn different_messages_different_signatures() {
+        let kp = generate_key_pair();
+        let sig1 = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), b"first").unwrap();
+        let sig2 = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), b"second").unwrap();
+        assert_ne!(sig1, sig2);
+    }
+
+    #[test]
+    fn same_message_same_signature() {
+        let kp = generate_key_pair();
+        let msg = b"consistent message";
+        let sig1 = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), msg).unwrap();
+        let sig2 = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), msg).unwrap();
+        assert_eq!(sig1, sig2);
+    }
+
+    #[test]
+    fn sign_invalid_secret_key() {
+        assert!(sign_with_secret(&SecretKeyInput::Base58("invalid-key"), b"test").is_err());
+    }
+
+    #[test]
+    fn end_to_end_generate_sign_verify() {
+        let kp = generate_key_pair();
+        let msg = b"End-to-end test message";
+        let sig = sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), msg).unwrap();
+        assert!(verify_signature(&kp.public_key, msg, &sig));
+    }
+
+    #[test]
+    fn recreated_keypair_signs_correctly() {
+        let original = generate_key_pair();
+        let recreated = create_key_pair_from_secret(&original.secret_key).unwrap();
+        let msg = b"Test with recreated keypair";
+        let sig = sign_with_secret(&SecretKeyInput::Base58(&recreated.secret_key), msg).unwrap();
+        assert!(verify_signature(&original.public_key, msg, &sig));
+    }
+}

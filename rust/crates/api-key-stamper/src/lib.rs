@@ -119,3 +119,114 @@ impl Stamper for ApiKeyStamper {
         StamperType::Pki
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use phantom_base64url::base64url_decode_to_string;
+    use phantom_crypto::generate_key_pair;
+
+    fn make_stamper() -> (ApiKeyStamper, phantom_crypto::Keypair) {
+        let kp = generate_key_pair();
+        let stamper = ApiKeyStamper::new(ApiKeyStamperConfig {
+            api_secret_key: kp.secret_key.clone(),
+        })
+        .unwrap();
+        (stamper, kp)
+    }
+
+    #[test]
+    fn constructor_valid_key() {
+        let (stamper, _kp) = make_stamper();
+        assert_eq!(stamper.algorithm(), Algorithm::Ed25519);
+        assert_eq!(stamper.stamper_type(), StamperType::Pki);
+    }
+
+    #[test]
+    fn constructor_invalid_key() {
+        let result = ApiKeyStamper::new(ApiKeyStamperConfig {
+            api_secret_key: "invalid-key".to_string(),
+        });
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn stamp_returns_base64url_json() {
+        let (stamper, _kp) = make_stamper();
+        let data = b"test message".to_vec();
+
+        let stamp = stamper
+            .stamp(StampParams::Pki { data })
+            .await
+            .unwrap();
+
+        assert!(!stamp.is_empty());
+
+        // Should be base64url-encoded JSON
+        let json_str = base64url_decode_to_string(&stamp).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        assert!(parsed.get("publicKey").is_some());
+        assert!(parsed.get("signature").is_some());
+        assert_eq!(parsed.get("kind").unwrap().as_str().unwrap(), "PKI");
+    }
+
+    #[tokio::test]
+    async fn stamp_verifiable_signature() {
+        let (stamper, kp) = make_stamper();
+        let data = b"test message for verification".to_vec();
+
+        let stamp = stamper
+            .stamp(StampParams::Pki { data: data.clone() })
+            .await
+            .unwrap();
+
+        let json_str = base64url_decode_to_string(&stamp).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        let sig_b64 = parsed["signature"].as_str().unwrap();
+        let sig_bytes = phantom_base64url::base64url_decode(sig_b64).unwrap();
+
+        // Compare with direct signing
+        let expected_sig =
+            sign_with_secret(&SecretKeyInput::Base58(&kp.secret_key), &data).unwrap();
+        assert_eq!(sig_bytes, expected_sig);
+    }
+
+    #[tokio::test]
+    async fn different_data_different_stamps() {
+        let (stamper, _kp) = make_stamper();
+
+        let s1 = stamper
+            .stamp(StampParams::Pki {
+                data: b"first message".to_vec(),
+            })
+            .await
+            .unwrap();
+        let s2 = stamper
+            .stamp(StampParams::Pki {
+                data: b"second message".to_vec(),
+            })
+            .await
+            .unwrap();
+
+        assert_ne!(s1, s2);
+    }
+
+    #[tokio::test]
+    async fn same_data_same_stamps() {
+        let (stamper, _kp) = make_stamper();
+        let data = b"consistent message".to_vec();
+
+        let s1 = stamper
+            .stamp(StampParams::Pki { data: data.clone() })
+            .await
+            .unwrap();
+        let s2 = stamper
+            .stamp(StampParams::Pki { data })
+            .await
+            .unwrap();
+
+        assert_eq!(s1, s2);
+    }
+}

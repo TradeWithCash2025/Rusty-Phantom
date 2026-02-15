@@ -856,6 +856,17 @@ dependencies = [
 [[package]]
 name = "phantom-client-demo"
 version = "0.1.0"
+dependencies = [
+ "bs58",
+ "phantom-api-key-stamper",
+ "phantom-base64url",
+ "phantom-client",
+ "phantom-crypto",
+ "phantom-sdk-types",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "phantom-constants"
@@ -993,6 +1004,13 @@ dependencies = [
 [[package]]
 name = "phantom-server-sdk-demo"
 version = "0.1.0"
+dependencies = [
+ "phantom-constants",
+ "phantom-crypto",
+ "phantom-server-sdk",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "phantom-ui"

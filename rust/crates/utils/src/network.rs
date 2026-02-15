@@ -2,31 +2,35 @@
 
 /// Extract the chain prefix from a CAIP-2 network identifier.
 ///
+/// Returns the prefix lowercased, matching the TypeScript behavior.
+///
 /// # Examples
 /// ```
 /// use phantom_utils::network::get_chain_prefix;
 /// assert_eq!(get_chain_prefix("eip155:1"), "eip155");
+/// assert_eq!(get_chain_prefix("EIP155:1"), "eip155");
 /// assert_eq!(get_chain_prefix("solana:101"), "solana");
 /// ```
-pub fn get_chain_prefix(network_id: &str) -> &str {
+pub fn get_chain_prefix(network_id: &str) -> String {
     network_id
         .split(':')
         .next()
         .unwrap_or(network_id)
+        .to_ascii_lowercase()
 }
 
 /// Check if a network identifier is for an Ethereum/EVM chain.
 ///
 /// Returns `true` if the network ID starts with `eip155:`.
 pub fn is_ethereum_chain(network_id: &str) -> bool {
-    get_chain_prefix(network_id).eq_ignore_ascii_case("eip155")
+    get_chain_prefix(network_id) == "eip155"
 }
 
 /// Check if a network identifier is for a Solana chain.
 ///
 /// Returns `true` if the network ID starts with `solana:`.
 pub fn is_solana_chain(network_id: &str) -> bool {
-    get_chain_prefix(network_id).eq_ignore_ascii_case("solana")
+    get_chain_prefix(network_id) == "solana"
 }
 
 #[cfg(test)]
@@ -61,6 +65,12 @@ mod tests {
         assert_eq!(get_chain_prefix("solana:mainnet"), "solana");
         assert_eq!(get_chain_prefix("bitcoin:mainnet"), "bitcoin");
         assert_eq!(get_chain_prefix("sui:mainnet"), "sui");
+    }
+
+    #[test]
+    fn get_chain_prefix_lowercases() {
+        assert_eq!(get_chain_prefix("EIP155:1"), "eip155");
+        assert_eq!(get_chain_prefix("Solana:mainnet"), "solana");
     }
 
     #[test]

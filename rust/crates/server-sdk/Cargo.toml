@@ -3,6 +3,20 @@ name = "phantom-server-sdk"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Server-side SDK for Phantom integration"
+description = "Server-side SDK for Phantom wallet integration"
 
 [dependencies]
+phantom-constants = { workspace = true }
+phantom-utils = { workspace = true }
+phantom-base64url = { workspace = true }
+phantom-sdk-types = { workspace = true }
+phantom-api-key-stamper = { workspace = true }
+phantom-client = { workspace = true }
+phantom-parsers = { workspace = true }
+phantom-crypto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+bs58 = { workspace = true }

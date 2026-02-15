@@ -6,3 +6,13 @@ license.workspace = true
 description = "Browser-injected SDK for Phantom wallet integration"
 
 [dependencies]
+phantom-constants = { path = "../constants" }
+phantom-chain-interfaces = { path = "../chain-interfaces" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["time", "sync"] }
+thiserror = { workspace = true }
+regex = "1"
+chrono = "0.4"

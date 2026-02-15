@@ -810,6 +810,20 @@ dependencies = [
 [[package]]
 name = "phantom-browser-sdk"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "phantom-browser-injected-sdk",
+ "phantom-chain-interfaces",
+ "phantom-client",
+ "phantom-constants",
+ "phantom-embedded-provider-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "phantom-chain-interfaces"

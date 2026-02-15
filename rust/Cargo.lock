@@ -844,6 +844,7 @@ dependencies = [
  "once_cell",
  "phantom-base64url",
  "phantom-constants",
+ "phantom-crypto",
  "phantom-parsers",
  "phantom-sdk-types",
  "phantom-utils",

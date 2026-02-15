@@ -118,11 +118,76 @@ pub fn parse_browser_from_user_agent(user_agent: &str, has_brave_api: bool) -> B
         }
     }
 
+    // Secondary fallback loop: if still unknown, try basic patterns
+    if name == "unknown" {
+        let fallback_patterns: &[(&str, &str)] = &[
+            (r"Chrome/([0-9]+)", "chrome"),
+            (r"Firefox/([0-9]+)", "firefox"),
+            (r"Safari/([0-9]+)", "safari"),
+            (r"Edge/([0-9]+)", "edge"),
+            (r"Opera/([0-9]+)", "opera"),
+        ];
+
+        for (pattern, browser_name) in fallback_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                if let Some(cap) = re.captures(user_agent) {
+                    name = browser_name.to_string();
+                    if let Some(m) = cap.get(1) {
+                        version = m.as_str().to_string();
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     BrowserInfo {
         name,
         version,
         user_agent: user_agent.to_string(),
     }
+}
+
+/// Detect the current browser from a user agent string.
+///
+/// This is a thin wrapper around [`parse_browser_from_user_agent`] that mirrors
+/// the TypeScript `detectBrowser()` API. In the TS version this reads from
+/// `window.navigator.userAgent`; since there is no `window` in Rust, the caller
+/// must supply the user agent string directly.
+pub fn detect_browser(user_agent: &str, has_brave_api: bool) -> BrowserInfo {
+    parse_browser_from_user_agent(user_agent, has_brave_api)
+}
+
+/// Detect if the device is mobile, using a user agent string and optional
+/// screen-dimension / touch-capability flags.
+///
+/// Mirrors the TypeScript `isMobileDevice()` function which checks
+/// `window.navigator.userAgent`, `window.screen` dimensions, and
+/// `ontouchstart` / `maxTouchPoints`.  Because Rust has no `window` object,
+/// the caller passes these values explicitly.
+///
+/// * `user_agent` - The user agent string.
+/// * `screen_width` - Optional screen width in pixels.
+/// * `screen_height` - Optional screen height in pixels.
+/// * `has_touch` - Whether the device supports touch input.
+///
+/// Returns `true` if the device is considered mobile based on the same
+/// heuristic as the TS implementation: mobile UA **or** (small screen **and**
+/// touch capable).
+pub fn is_mobile_device(
+    user_agent: &str,
+    screen_width: Option<u32>,
+    screen_height: Option<u32>,
+    has_touch: bool,
+) -> bool {
+    let is_mobile_ua = is_mobile_user_agent(user_agent);
+
+    let is_small_screen = match (screen_width, screen_height) {
+        (Some(w), Some(h)) => w <= 768 || h <= 768,
+        _ => false,
+    };
+
+    is_mobile_ua || (is_small_screen && has_touch)
 }
 
 /// Get a formatted platform name from browser info.

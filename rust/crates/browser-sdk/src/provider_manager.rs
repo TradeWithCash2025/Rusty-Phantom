@@ -47,6 +47,8 @@ pub struct ProviderManager {
     config: BrowserSdkConfig,
     providers: RwLock<HashMap<String, Arc<dyn Provider>>>,
     current_provider_key: RwLock<Option<String>>,
+    /// Concrete reference to the injected provider for chain-level access.
+    injected_provider: RwLock<Option<Arc<InjectedProvider>>>,
     event_listeners: RwLock<HashMap<String, Vec<(u64, Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>)>>>,
     next_listener_id: RwLock<u64>,
 }
@@ -64,6 +66,7 @@ impl ProviderManager {
             config,
             providers: RwLock::new(HashMap::new()),
             current_provider_key: RwLock::new(None),
+            injected_provider: RwLock::new(None),
             event_listeners: RwLock::new(HashMap::new()),
             next_listener_id: RwLock::new(1),
         }
@@ -94,13 +97,15 @@ impl ProviderManager {
                 "Creating injected provider",
                 None,
             );
-            let injected = InjectedProvider::new(InjectedProviderConfig {
+            let injected = Arc::new(InjectedProvider::new(InjectedProviderConfig {
                 address_types: self.config.address_types.clone(),
-            });
+            }));
+            // Store the concrete Arc for chain-level access.
+            *self.injected_provider.write().await = Some(injected.clone());
             self.providers
                 .write()
                 .await
-                .insert("injected".to_string(), Arc::new(injected));
+                .insert("injected".to_string(), injected);
         }
 
         // Set default provider key: prefer embedded if available, otherwise injected
@@ -145,13 +150,14 @@ impl ProviderManager {
 
         // Create injected provider on-demand if needed
         if provider_type == "injected" && !self.providers.read().await.contains_key(&key) {
-            let injected = InjectedProvider::new(InjectedProviderConfig {
+            let injected = Arc::new(InjectedProvider::new(InjectedProviderConfig {
                 address_types: self.config.address_types.clone(),
-            });
+            }));
+            *self.injected_provider.write().await = Some(injected.clone());
             self.providers
                 .write()
                 .await
-                .insert(key.clone(), Arc::new(injected));
+                .insert(key.clone(), injected);
         }
 
         let providers = self.providers.read().await;
@@ -481,6 +487,14 @@ impl ProviderManager {
             // In a browser environment, this would save to localStorage.
             // In Rust CLI/server contexts, this is a no-op.
         }
+    }
+
+    /// Get a reference to the concrete injected provider, if available.
+    ///
+    /// This provides direct access to chain-specific methods (e.g., `solana()`,
+    /// `ethereum()`) that are not part of the generic `Provider` trait.
+    pub async fn get_injected_provider(&self) -> Option<Arc<InjectedProvider>> {
+        self.injected_provider.read().await.clone()
     }
 }
 

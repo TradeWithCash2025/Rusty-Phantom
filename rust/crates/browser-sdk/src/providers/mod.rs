@@ -9,6 +9,10 @@ pub use embedded::{
     BrowserURLParamsAccessor,
 };
 pub use injected::{
-    InjectedProvider, InjectedProviderConfig, InjectedWalletEthereumChain,
-    InjectedWalletSolanaChain,
+    ChainCallbacks, InjectedProvider, InjectedProviderConfig, InjectedWalletEthereumChain,
+    InjectedWalletSolanaChain, WalletStandardAccount, WalletStandardFeatures,
+    WalletStandardSolanaAdapter, WalletStandardWallet, StandardConnectFeature,
+    StandardDisconnectFeature, StandardEventsChangeProperties, StandardEventsFeature,
+    SolanaSignMessageFeature, SolanaSignTransactionFeature,
+    SolanaSignAndSendTransactionFeature,
 };

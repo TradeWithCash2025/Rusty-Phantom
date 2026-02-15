@@ -3,7 +3,11 @@
 //! Combines embedded and injected providers behind a unified API,
 //! with wallet discovery, debug logging, and auto-confirm support.
 
+use phantom_browser_injected_sdk::auto_confirm::{
+    AutoConfirmEnableParams, AutoConfirmResult, AutoConfirmSupportedChainsResult,
+};
 use phantom_browser_injected_sdk::ExtensionDetector;
+use phantom_chain_interfaces::{EthereumChain, SolanaChain};
 use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::WalletAddress;
 use std::sync::Arc;
@@ -11,7 +15,7 @@ use std::sync::Arc;
 use crate::debug::{debug, DebugCategory, DebugCallback, DebugLevel};
 use crate::provider_manager::{ProviderManager, ProviderPreference, SwitchProviderOptions};
 use crate::types::{AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider};
-use crate::wallets::InjectedWalletRegistry;
+use crate::wallets::{InjectedWalletInfo, InjectedWalletRegistry};
 
 /// All valid provider types for the browser SDK.
 const BROWSER_SDK_PROVIDER_TYPES: &[AuthProviderType] = &[
@@ -30,7 +34,6 @@ const BROWSER_SDK_PROVIDER_TYPES: &[AuthProviderType] = &[
 /// (extension-based) providers.
 pub struct BrowserSdk {
     provider_manager: ProviderManager,
-    #[allow(dead_code)]
     config: BrowserSdkConfig,
     is_loading: bool,
 }
@@ -96,20 +99,46 @@ impl BrowserSdk {
             None,
         );
 
-        let result = self.provider_manager.connect(options).await?;
-
-        debug().info(
-            DebugCategory::BROWSER_SDK,
-            "Connection successful",
-            None,
-        );
-
-        Ok(result)
+        match self.provider_manager.connect(options).await {
+            Ok(result) => {
+                debug().info(
+                    DebugCategory::BROWSER_SDK,
+                    "Connection successful",
+                    None,
+                );
+                Ok(result)
+            }
+            Err(err) => {
+                debug().error(
+                    DebugCategory::BROWSER_SDK,
+                    &format!("Connection failed: {}", err),
+                    None,
+                );
+                Err(err)
+            }
+        }
     }
 
     /// Disconnect from the wallet.
     pub async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.provider_manager.disconnect().await
+        match self.provider_manager.disconnect().await {
+            Ok(()) => {
+                debug().info(
+                    DebugCategory::BROWSER_SDK,
+                    "Disconnect successful",
+                    None,
+                );
+                Ok(())
+            }
+            Err(err) => {
+                debug().error(
+                    DebugCategory::BROWSER_SDK,
+                    &format!("Disconnect failed: {}", err),
+                    None,
+                );
+                Err(err)
+            }
+        }
     }
 
     /// Check if connected.
@@ -229,6 +258,108 @@ impl BrowserSdk {
     /// Set the loading state.
     pub fn set_loading(&mut self, loading: bool) {
         self.is_loading = loading;
+    }
+
+    // ---------------------------------------------------------------
+    // Chain accessors
+    // ---------------------------------------------------------------
+
+    /// Get the Solana chain provider from the current injected provider.
+    ///
+    /// Returns an error if no injected provider is active or the current
+    /// provider does not support Solana.
+    pub async fn solana(
+        &self,
+    ) -> Result<Arc<dyn SolanaChain>, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(provider) = self.provider_manager.get_injected_provider().await {
+            provider.solana().await
+        } else {
+            Err("No injected provider available for Solana chain access".into())
+        }
+    }
+
+    /// Get the Ethereum chain provider from the current injected provider.
+    ///
+    /// Returns an error if no injected provider is active or the current
+    /// provider does not support Ethereum.
+    pub async fn ethereum(
+        &self,
+    ) -> Result<Arc<dyn EthereumChain>, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(provider) = self.provider_manager.get_injected_provider().await {
+            provider.ethereum().await
+        } else {
+            Err("No injected provider available for Ethereum chain access".into())
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Wallet discovery
+    // ---------------------------------------------------------------
+
+    /// Get discovered wallets filtered by the configured address types.
+    ///
+    /// Returns wallets from the registry that support at least one of the
+    /// address types specified in the SDK configuration.
+    pub fn get_discovered_wallets(&self) -> Vec<InjectedWalletInfo> {
+        let registry = self.wallet_registry();
+        registry.get_by_address_types(&self.config.address_types)
+    }
+
+    // ---------------------------------------------------------------
+    // Auto-confirm delegation
+    // ---------------------------------------------------------------
+
+    /// Enable auto-confirm via the injected provider.
+    ///
+    /// Delegates to the injected provider's auto-confirm functionality.
+    /// Returns an error if no injected provider is available.
+    pub async fn enable_auto_confirm(
+        &self,
+        _params: Option<&AutoConfirmEnableParams>,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        // Auto-confirm requires a browser extension context. The injected
+        // provider communicates with the extension via RPC. In a pure-Rust
+        // environment we surface an explicit error.
+        if self.provider_manager.get_injected_provider().await.is_none() {
+            return Err("No injected provider available for auto-confirm".into());
+        }
+        Err("Auto-confirm is only available in browser extension contexts".into())
+    }
+
+    /// Disable auto-confirm via the injected provider.
+    ///
+    /// Returns an error if no injected provider is available.
+    pub async fn disable_auto_confirm(
+        &self,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        if self.provider_manager.get_injected_provider().await.is_none() {
+            return Err("No injected provider available for auto-confirm".into());
+        }
+        Err("Auto-confirm is only available in browser extension contexts".into())
+    }
+
+    /// Get auto-confirm status via the injected provider.
+    ///
+    /// Returns an error if no injected provider is available.
+    pub async fn get_auto_confirm_status(
+        &self,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        if self.provider_manager.get_injected_provider().await.is_none() {
+            return Err("No injected provider available for auto-confirm".into());
+        }
+        Err("Auto-confirm is only available in browser extension contexts".into())
+    }
+
+    /// Get supported auto-confirm chains via the injected provider.
+    ///
+    /// Returns an error if no injected provider is available.
+    pub async fn get_supported_auto_confirm_chains(
+        &self,
+    ) -> Result<AutoConfirmSupportedChainsResult, Box<dyn std::error::Error + Send + Sync>> {
+        if self.provider_manager.get_injected_provider().await.is_none() {
+            return Err("No injected provider available for auto-confirm".into());
+        }
+        Err("Auto-confirm is only available in browser extension contexts".into())
     }
 }
 

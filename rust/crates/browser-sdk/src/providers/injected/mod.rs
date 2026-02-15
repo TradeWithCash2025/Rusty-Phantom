@@ -5,8 +5,10 @@
 //! Supports multi-chain connections, event forwarding, and auto-connect.
 
 pub mod chains;
+pub mod wallet_standard;
 
 pub use chains::{InjectedWalletEthereumChain, InjectedWalletSolanaChain};
+pub use wallet_standard::*;
 
 use phantom_chain_interfaces::{EthereumChain, SolanaChain, SolanaConnectOptions};
 use phantom_client::constants::AddressFormat;
@@ -21,6 +23,31 @@ use crate::types::{
     AuthOptions, AuthProviderType, ConnectResult, ConnectResultWalletInfo, ConnectStatus, Provider,
 };
 use crate::wallets::{get_wallet_registry, InjectedWalletInfo, InjectedWalletRegistry};
+
+/// Chain callbacks interface for avoiding circular dependencies.
+///
+/// Mirrors the TypeScript `ChainCallbacks` interface used by injected
+/// wallet chain wrappers to call back into the InjectedProvider without
+/// creating a direct circular dependency.
+#[async_trait::async_trait]
+pub trait ChainCallbacks: Send + Sync {
+    /// Connect the wallet.
+    async fn connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Disconnect the wallet.
+    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Check if the wallet is connected.
+    fn is_connected(&self) -> bool;
+    /// Get the current wallet addresses.
+    fn get_addresses(&self) -> Vec<WalletAddress>;
+    /// Register an event listener.
+    fn on(
+        &self,
+        event: &str,
+        callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>,
+    ) -> u64;
+    /// Remove an event listener.
+    fn off(&self, event: &str, listener_id: u64);
+}
 
 /// Configuration for the injected provider.
 #[derive(Debug, Clone)]

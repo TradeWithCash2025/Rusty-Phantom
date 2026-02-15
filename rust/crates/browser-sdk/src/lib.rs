@@ -17,15 +17,16 @@ pub mod wallets;
 pub use browser_sdk::{
     is_phantom_login_available, wait_for_phantom_extension, BrowserSdk, PhantomFeaturesProvider,
 };
-pub use debug::{debug, DebugCategory, DebugLevel};
+pub use debug::{debug, DebugCallback, DebugCategory, DebugLevel, DebugMessage};
 pub use provider_manager::{ProviderPreference, SwitchProviderOptions};
 pub use types::{
     AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, ConnectStatus, Provider,
 };
 pub use phantom_embedded_provider_core::WalletAddress;
 pub use utils::{
-    get_browser_display_name, get_deeplink_to_phantom, get_platform_name,
-    is_mobile_user_agent, parse_browser_from_user_agent, BrowserInfo,
+    detect_browser, get_browser_display_name, get_deeplink_to_phantom, get_platform_name,
+    is_auth_callback_url, is_auth_failure_callback, is_mobile_device, is_mobile_user_agent,
+    parse_browser_from_user_agent, BrowserInfo,
 };
 pub use wallets::{
     custom_wallet_configs, get_wallet_registry, is_phantom_wallet, CustomWalletConfig,
@@ -34,5 +35,12 @@ pub use wallets::{
 
 // Re-export from dependencies
 pub use phantom_chain_interfaces::{EthereumChain, SolanaChain};
-pub use phantom_constants::NetworkId;
+pub use phantom_constants::{NetworkId, PHANTOM_ICON};
 pub use phantom_client::constants::AddressFormat;
+pub use phantom_browser_injected_sdk::auto_confirm::{
+    AutoConfirmEnableParams, AutoConfirmResult, AutoConfirmSupportedChainsResult,
+};
+pub use phantom_embedded_provider_core::{
+    ConnectErrorEventData, ConnectEventData, ConnectStartEventData, DisconnectEventData,
+    EmbeddedProviderEvent,
+};

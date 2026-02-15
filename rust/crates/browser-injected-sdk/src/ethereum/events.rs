@@ -68,6 +68,34 @@ impl EthereumEventListeners {
         }
     }
 
+    /// Add an event listener by event name string. Returns a listener ID.
+    pub fn add_listener_by_name(
+        &self,
+        event: &str,
+        callback: Box<dyn Fn(serde_json::Value) + Send + Sync>,
+    ) -> u64 {
+        let event_type = match event {
+            "connect" => EthereumEventType::Connect,
+            "disconnect" => EthereumEventType::Disconnect,
+            "accountsChanged" => EthereumEventType::AccountsChanged,
+            "chainChanged" => EthereumEventType::ChainChanged,
+            _ => return 0,
+        };
+        self.add_listener(event_type, Arc::from(callback)) as u64
+    }
+
+    /// Remove an event listener by event name string and ID.
+    pub fn remove_listener_by_name(&self, event: &str, id: u64) {
+        let event_type = match event {
+            "connect" => EthereumEventType::Connect,
+            "disconnect" => EthereumEventType::Disconnect,
+            "accountsChanged" => EthereumEventType::AccountsChanged,
+            "chainChanged" => EthereumEventType::ChainChanged,
+            _ => return,
+        };
+        self.remove_listener(event_type, id as usize);
+    }
+
     /// Clear all event listeners.
     pub fn clear_all(&self) {
         let mut listeners = self.listeners.lock().unwrap();

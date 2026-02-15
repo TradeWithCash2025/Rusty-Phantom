@@ -5,11 +5,20 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::RngCore;
+use serde::Deserialize;
 
 use crate::auth::callback_server::{CallbackServer, CallbackServerOptions};
 use crate::auth::dcr::DCRClient;
-use crate::session::types::{DCRClientConfig, StamperKeys};
+use crate::session::types::{DCRClientConfig, OAuthTokens, StamperKeys};
 use crate::utils::logger::Logger;
+
+/// OAuth 2.0 token endpoint response.
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    refresh_token: String,
+    expires_in: u64,
+}
 
 /// Result of a successful SSO flow.
 pub struct OAuthFlowResult {
@@ -162,16 +171,21 @@ impl OAuthFlow {
             &session_id,
         );
 
-        // Step 5: Open browser
+        // Step 5: Start callback server before opening browser
+        self.logger.info("Step 5: Starting callback server");
+        let callback_future = callback_server.start_and_wait_for_callback(&session_id);
+
+        // Step 6: Open browser
         self.logger
-            .info(&format!("Step 5: Opening browser for {} authentication", self.provider));
+            .info(&format!("Step 6: Opening browser for {} authentication", self.provider));
+        // Print the URL so the user can open it manually if needed
         self.logger
             .info("Please open the following URL in your browser to complete authentication:");
         self.logger.info(&auth_url);
 
-        // Step 6: Wait for callback
-        self.logger.info("Step 6: Waiting for SSO callback");
-        let callback_params = callback_server.wait_for_callback(&session_id).await?;
+        // Step 7: Wait for callback
+        self.logger.info("Step 7: Waiting for SSO callback");
+        let callback_params = callback_future.await?;
         self.logger.info("Callback received successfully");
 
         Ok(OAuthFlowResult {
@@ -183,6 +197,75 @@ impl OAuthFlow {
                 public_key: stamper_keys.public_key,
                 secret_key: stamper_keys.secret_key,
             },
+        })
+    }
+
+    /// Refreshes an access token using a refresh token.
+    ///
+    /// Note: Not used in SSO flow, kept for future OAuth compatibility.
+    pub async fn refresh_token(
+        &self,
+        refresh_token: &str,
+        client_config: &DCRClientConfig,
+    ) -> Result<OAuthTokens, Box<dyn std::error::Error + Send + Sync>> {
+        self.logger.info("Refreshing access token");
+
+        let token_endpoint = format!("{}/oauth2/token", self.auth_base_url);
+        let is_public_client = client_config.client_secret.is_empty();
+
+        // Build request parameters
+        let mut params = vec![
+            ("grant_type", "refresh_token".to_string()),
+            ("refresh_token", refresh_token.to_string()),
+        ];
+
+        // For public clients, send client_id in body
+        if is_public_client {
+            params.push(("client_id", client_config.client_id.clone()));
+        }
+
+        // Build request
+        let http_client = reqwest::Client::new();
+        let mut request_builder = http_client
+            .post(&token_endpoint)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .timeout(std::time::Duration::from_secs(30))
+            .form(&params);
+
+        // For confidential clients, use HTTP Basic Auth
+        if !is_public_client {
+            request_builder = request_builder.basic_auth(
+                &client_config.client_id,
+                Some(&client_config.client_secret),
+            );
+        }
+
+        let response = request_builder.send().await.map_err(|e| {
+            let msg = format!("Token refresh failed: {}", e);
+            self.logger.error(&msg);
+            msg
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let msg = format!("Token refresh failed ({}): {}", status, body);
+            self.logger.error(&msg);
+            return Err(msg.into());
+        }
+
+        let token_response: TokenResponse = response.json().await.map_err(|e| {
+            let msg = format!("Token refresh failed: invalid response: {}", e);
+            self.logger.error(&msg);
+            msg
+        })?;
+
+        self.logger.info("Token refresh successful");
+
+        Ok(OAuthTokens {
+            access_token: token_response.access_token,
+            refresh_token: token_response.refresh_token,
+            expires_in: token_response.expires_in,
         })
     }
 

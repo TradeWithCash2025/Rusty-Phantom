@@ -4,11 +4,14 @@
 //! with wallet discovery, debug logging, and auto-confirm support.
 
 use phantom_browser_injected_sdk::ExtensionDetector;
+use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::WalletAddress;
+use std::sync::Arc;
 
 use crate::debug::{debug, DebugCategory, DebugCallback, DebugLevel};
-use crate::provider_manager::ProviderManager;
-use crate::types::{AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult};
+use crate::provider_manager::{ProviderManager, ProviderPreference, SwitchProviderOptions};
+use crate::types::{AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider};
+use crate::wallets::InjectedWalletRegistry;
 
 /// All valid provider types for the browser SDK.
 const BROWSER_SDK_PROVIDER_TYPES: &[AuthProviderType] = &[
@@ -176,6 +179,56 @@ impl BrowserSdk {
         if let Some(cb) = callback {
             self.set_debug_callback(cb);
         }
+    }
+
+    /// Get the current provider info (type and wallet type).
+    pub async fn get_current_provider_info(&self) -> Option<ProviderPreference> {
+        self.provider_manager.get_current_provider_info().await
+    }
+
+    /// Get enabled address types from the current provider.
+    pub async fn get_enabled_address_types(&self) -> Vec<AddressFormat> {
+        self.provider_manager.get_enabled_address_types().await
+    }
+
+    /// Switch provider type.
+    pub async fn switch_provider(
+        &self,
+        provider_type: &str,
+        options: Option<SwitchProviderOptions>,
+    ) -> Result<Arc<dyn Provider>, Box<dyn std::error::Error + Send + Sync>> {
+        self.provider_manager
+            .switch_provider(provider_type, options)
+            .await
+    }
+
+    /// Register an event listener. Returns a listener ID for removal.
+    pub async fn on(
+        &self,
+        event: &str,
+        callback: Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>,
+    ) -> u64 {
+        self.provider_manager.on(event, callback).await
+    }
+
+    /// Remove an event listener by ID.
+    pub async fn off(&self, event: &str, listener_id: u64) {
+        self.provider_manager.off(event, listener_id).await;
+    }
+
+    /// Get the wallet registry for discovered injected wallets.
+    pub fn wallet_registry(&self) -> Arc<InjectedWalletRegistry> {
+        crate::wallets::get_wallet_registry()
+    }
+
+    /// Register an external provider (e.g., embedded provider from platform adapter).
+    pub async fn register_provider(&self, key: &str, provider: Arc<dyn Provider>) {
+        self.provider_manager.register_provider(key, provider).await;
+    }
+
+    /// Set the loading state.
+    pub fn set_loading(&mut self, loading: bool) {
+        self.is_loading = loading;
     }
 }
 

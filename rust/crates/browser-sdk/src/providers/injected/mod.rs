@@ -4,6 +4,10 @@
 //! external wallets discovered via EIP-6963 and Wallet Standard).
 //! Supports multi-chain connections, event forwarding, and auto-connect.
 
+pub mod chains;
+
+pub use chains::{InjectedWalletEthereumChain, InjectedWalletSolanaChain};
+
 use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::WalletAddress;
 use std::collections::HashMap;

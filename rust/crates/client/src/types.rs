@@ -42,6 +42,21 @@ pub struct WalletAddress {
     pub address: String,
 }
 
+/// Transaction is an encoded string:
+/// - Solana: base64url encoded
+/// - Ethereum: RLP-encoded hex string
+/// - Other chains: base64url encoded
+pub type Transaction = String;
+
+/// A keypair with public and secret keys.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Keypair {
+    /// Base64url encoded public key.
+    pub public_key: String,
+    /// Base64url encoded secret key.
+    pub secret_key: String,
+}
+
 /// A signed transaction result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTransaction {

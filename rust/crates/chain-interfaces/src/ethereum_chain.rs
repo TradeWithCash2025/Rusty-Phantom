@@ -92,9 +92,11 @@ pub trait EthereumChain: Send + Sync {
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Switch to a different EVM chain.
+    ///
+    /// Accepts either a numeric chain ID or a hex string (e.g., "0x1").
     async fn switch_chain(
         &self,
-        chain_id: u64,
+        chain_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Get the current chain ID as a number.
@@ -105,4 +107,13 @@ pub trait EthereumChain: Send + Sync {
 
     /// Check if the wallet is connected.
     fn is_connected(&self) -> bool;
+
+    /// Register an event listener.
+    ///
+    /// Supported events: "connect", "disconnect", "accountsChanged", "chainChanged".
+    /// Returns a listener ID for removal.
+    fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64;
+
+    /// Remove an event listener by ID.
+    fn off(&self, event: &str, listener_id: u64);
 }

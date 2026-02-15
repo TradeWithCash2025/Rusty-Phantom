@@ -11,6 +11,7 @@ phantom-chain-interfaces = { path = "../chain-interfaces" }
 phantom-embedded-provider-core = { path = "../embedded-provider-core" }
 phantom-browser-injected-sdk = { path = "../browser-injected-sdk" }
 phantom-client = { path = "../client" }
+phantom-sdk-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

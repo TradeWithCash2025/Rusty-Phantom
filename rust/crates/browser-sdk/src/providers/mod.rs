@@ -3,5 +3,12 @@
 pub mod embedded;
 pub mod injected;
 
-pub use embedded::BrowserEmbeddedProvider;
-pub use injected::{InjectedProvider, InjectedProviderConfig};
+pub use embedded::{
+    BrowserAuthConfig, BrowserAuthProvider, BrowserEmbeddedProvider, BrowserLogger,
+    BrowserPlatformAdapter, BrowserPlatformConfig, BrowserPhantomAppProvider, BrowserStorage,
+    BrowserURLParamsAccessor,
+};
+pub use injected::{
+    InjectedProvider, InjectedProviderConfig, InjectedWalletEthereumChain,
+    InjectedWalletSolanaChain,
+};

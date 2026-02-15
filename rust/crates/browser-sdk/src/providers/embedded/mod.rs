@@ -3,6 +3,21 @@
 //! Wraps the core `EmbeddedProvider` with browser-specific platform adapters
 //! (storage, auth, stamper, URL params). In the TypeScript SDK, this uses
 //! IndexedDB stamper, localStorage, and window.location for browser integration.
+//!
+//! This module also provides the browser-specific platform adapter implementations:
+//! - [`BrowserAuthProvider`] — OAuth redirect-based auth (implements [`AuthProvider`])
+//! - [`BrowserLogger`] — Console/tracing-based debug logging (implements [`DebugLogger`])
+//! - [`BrowserStorage`] — File-backed session storage (implements [`EmbeddedStorage`])
+//! - [`BrowserURLParamsAccessor`] — URL parameter access (implements [`UrlParamsAccessor`])
+//! - [`BrowserPhantomAppProvider`] — Phantom app integration (implements [`PhantomAppProvider`])
+//! - [`BrowserPlatformAdapter`] — Aggregates all adapters (implements [`PlatformAdapter`])
+
+mod auth;
+mod logger;
+mod phantom_app;
+mod platform;
+mod storage;
+mod url_params;
 
 use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::{
@@ -11,6 +26,14 @@ use phantom_embedded_provider_core::{
 use std::sync::Arc;
 
 use crate::types::{AuthOptions, ConnectResult, ConnectStatus, Provider};
+
+// Re-export browser adapter types.
+pub use auth::{BrowserAuthConfig, BrowserAuthProvider};
+pub use logger::BrowserLogger;
+pub use phantom_app::BrowserPhantomAppProvider;
+pub use platform::{BrowserPlatformAdapter, BrowserPlatformConfig};
+pub use storage::BrowserStorage;
+pub use url_params::BrowserURLParamsAccessor;
 
 /// Browser-specific embedded provider.
 ///

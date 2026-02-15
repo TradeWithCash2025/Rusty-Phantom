@@ -5,6 +5,7 @@
 //! and chain-specific adapters.
 
 pub mod constants;
+pub mod embedded_chains;
 pub mod embedded_provider;
 pub mod interfaces;
 pub mod types;
@@ -22,6 +23,7 @@ pub use types::{
     EmbeddedProviderConfig, SignAndSendTransactionParams, SignMessageParams, SignMessageResult,
     SignTransactionParams, SignTypedDataV4Params, SignedTransaction, WalletAddress,
 };
+pub use embedded_chains::{EmbeddedEthereumChain, EmbeddedSolanaChain};
 pub use utils::{generate_session_id, retry_with_backoff};
 pub use constants::{
     AUTHENTICATOR_EXPIRATION_TIME_MS, AUTHENTICATOR_RENEWAL_WINDOW_MS,

@@ -17,10 +17,10 @@ pub use phantom_client::PhantomClient;
 pub use types::{
     AuthenticatorConfig, CreateAuthenticatorParams, CreateWalletResult,
     DeleteAuthenticatorParams, DerivationInfo, GetWalletWithTagParams, GetWalletsResult,
-    IdTokenClaims, PhantomClientConfig, PrepareErrorResponse, PrepareResponse,
+    IdTokenClaims, Keypair, PhantomClientConfig, PrepareErrorResponse, PrepareResponse,
     SignAndSendTransactionParams, SignMessageParams, SignTransactionParams, SignTypedDataParams,
     SignedTransaction, SignedTransactionResult, SimulationConfig, SpendingLimitConfig,
-    SubmissionConfig, UserConfig, Wallet, WalletAddress, WalletServiceErrorData,
+    SubmissionConfig, Transaction, UserConfig, Wallet, WalletAddress, WalletServiceErrorData,
     WalletServiceErrorType,
 };
 

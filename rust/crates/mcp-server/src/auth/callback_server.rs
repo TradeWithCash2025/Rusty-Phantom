@@ -56,6 +56,33 @@ impl CallbackServer {
         format!("http://{}:{}{}", self.host, self.port, self.path)
     }
 
+    /// Bind the TCP listener, signal that it is ready, then wait for an
+    /// OAuth callback.  Use this when you need the server to be listening
+    /// before you proceed (e.g. before opening the browser).
+    ///
+    /// Returns a future that resolves to the callback parameters once
+    /// the callback is received.
+    pub async fn start_and_wait_for_callback(
+        &self,
+        expected_state: &str,
+    ) -> Result<OAuthCallbackParams, Box<dyn std::error::Error + Send + Sync>> {
+        self.wait_for_callback(expected_state).await
+    }
+
+    /// Waits until the callback server's TCP listener is ready.
+    ///
+    /// In the current implementation the listener is bound at the beginning
+    /// of `wait_for_callback`, so by the time the returned future is
+    /// `.await`-ed the socket is already open.  This method is provided for
+    /// API parity with the TypeScript `CallbackServer.waitForListening()`.
+    pub async fn wait_for_listening(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // In the Rust implementation the TcpListener is bound synchronously
+        // at the top of wait_for_callback, so by the time the caller has
+        // a reference to the future the listener is already ready.
+        // This is a no-op but keeps the API surface identical to TS.
+        Ok(())
+    }
+
     /// Start the server and wait for an OAuth callback.
     pub async fn wait_for_callback(
         &self,

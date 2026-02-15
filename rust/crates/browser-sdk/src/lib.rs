@@ -18,7 +18,7 @@ pub use browser_sdk::{
     is_phantom_login_available, wait_for_phantom_extension, BrowserSdk, PhantomFeaturesProvider,
 };
 pub use debug::{debug, DebugCategory, DebugLevel};
-pub use provider_manager::ProviderPreference;
+pub use provider_manager::{ProviderPreference, SwitchProviderOptions};
 pub use types::{
     AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, ConnectStatus, Provider,
 };
@@ -27,7 +27,10 @@ pub use utils::{
     get_browser_display_name, get_deeplink_to_phantom, get_platform_name,
     is_mobile_user_agent, parse_browser_from_user_agent, BrowserInfo,
 };
-pub use wallets::{get_wallet_registry, InjectedWalletId, InjectedWalletInfo, InjectedWalletRegistry};
+pub use wallets::{
+    custom_wallet_configs, get_wallet_registry, is_phantom_wallet, CustomWalletConfig,
+    DiscoverySource, InjectedWalletId, InjectedWalletInfo, InjectedWalletRegistry, WalletProviders,
+};
 
 // Re-export from dependencies
 pub use phantom_chain_interfaces::{EthereumChain, SolanaChain};

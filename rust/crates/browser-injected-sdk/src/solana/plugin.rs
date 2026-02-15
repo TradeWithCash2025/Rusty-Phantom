@@ -146,6 +146,14 @@ impl SolanaChain for Solana {
         // This is a no-op for the browser-injected SDK.
         Ok(())
     }
+
+    fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
+        self.events.add_listener_by_name(event, listener)
+    }
+
+    fn off(&self, event: &str, listener_id: u64) {
+        self.events.remove_listener_by_name(event, listener_id);
+    }
 }
 
 /// Create a Solana plugin for the Phantom instance.

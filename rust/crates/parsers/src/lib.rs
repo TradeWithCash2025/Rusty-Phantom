@@ -51,6 +51,8 @@ pub enum TransactionInput {
         /// The original SDK format (e.g., "@solana/web3.js", "ethers").
         format: String,
     },
+    /// JSON transaction object (for EVM RLP encoding).
+    JsonObject(serde_json::Value),
 }
 
 /// Parse a transaction to KMS format based on network type.
@@ -105,7 +107,7 @@ fn parse_solana_transaction_to_base64url(
                 original_format: "base64".to_string(),
             })
         }
-        TransactionInput::HexString(_) => {
+        TransactionInput::HexString(_) | TransactionInput::JsonObject(_) => {
             Err(ParseError::UnsupportedFormat("Solana".to_string()))
         }
     }
@@ -115,6 +117,7 @@ fn parse_solana_transaction_to_base64url(
 ///
 /// - RLP hex strings → returned as-is
 /// - Raw bytes → converted to hex
+/// - JSON transaction objects → RLP encoded
 fn parse_evm_transaction_to_hex(
     transaction: TransactionInput,
 ) -> Result<ParsedTransaction, ParseError> {
@@ -152,6 +155,119 @@ fn parse_evm_transaction_to_hex(
                 original_format: "base64".to_string(),
             })
         }
+        TransactionInput::JsonObject(obj) => {
+            rlp_encode_evm_transaction(&obj)
+        }
+    }
+}
+
+/// RLP encode an EVM transaction from a JSON object.
+///
+/// Supports both EIP-1559 (type 2) and legacy transaction formats.
+/// Mirrors the TS behavior of `ethers.Transaction.from(tx).unsignedSerialized`.
+fn rlp_encode_evm_transaction(
+    tx: &serde_json::Value,
+) -> Result<ParsedTransaction, ParseError> {
+    use rlp::RlpStream;
+
+    let get_str = |key: &str| -> Option<String> {
+        tx.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    let hex_to_bytes = |hex: &str| -> Vec<u8> {
+        let h = hex.strip_prefix("0x").unwrap_or(hex);
+        if h.is_empty() {
+            return vec![];
+        }
+        hex_decode(h).unwrap_or_default()
+    };
+
+    // Check for EIP-1559 (type 2) transaction
+    let is_eip1559 = get_str("maxFeePerGas").is_some()
+        || get_str("max_fee_per_gas").is_some()
+        || get_str("type")
+            .as_deref()
+            .map_or(false, |t| t == "0x2" || t == "2");
+
+    // Get gas limit: check gasLimit, gas, then default for simple transfers
+    let gas_limit = get_str("gasLimit")
+        .or_else(|| get_str("gas_limit"))
+        .or_else(|| get_str("gas"))
+        .unwrap_or_else(|| {
+            // Default for simple transfers
+            if get_str("to").is_some()
+                && get_str("value").is_some()
+                && get_str("data").is_none()
+            {
+                "0x5208".to_string() // 21000
+            } else {
+                "0x0".to_string()
+            }
+        });
+
+    // Normalize "to" address to lowercase
+    let to = get_str("to").map(|t| t.to_lowercase()).unwrap_or_default();
+    let value = get_str("value").unwrap_or_else(|| "0x0".to_string());
+    let data = get_str("data").unwrap_or_default();
+    let nonce = get_str("nonce").unwrap_or_else(|| "0x0".to_string());
+    let chain_id = get_str("chainId")
+        .or_else(|| get_str("chain_id"))
+        .unwrap_or_else(|| "0x1".to_string());
+
+    if is_eip1559 {
+        let max_fee = get_str("maxFeePerGas")
+            .or_else(|| get_str("max_fee_per_gas"))
+            .unwrap_or_else(|| "0x0".to_string());
+        let max_priority_fee = get_str("maxPriorityFeePerGas")
+            .or_else(|| get_str("max_priority_fee_per_gas"))
+            .unwrap_or_else(|| "0x0".to_string());
+
+        // EIP-1559: 0x02 || RLP([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList])
+        let mut stream = RlpStream::new_list(9);
+        stream.append(&hex_to_bytes(&chain_id));
+        stream.append(&hex_to_bytes(&nonce));
+        stream.append(&hex_to_bytes(&max_priority_fee));
+        stream.append(&hex_to_bytes(&max_fee));
+        stream.append(&hex_to_bytes(&gas_limit));
+        stream.append(&hex_to_bytes(&to));
+        stream.append(&hex_to_bytes(&value));
+        stream.append(&hex_to_bytes(&data));
+        // Access list (empty)
+        stream.begin_list(0);
+
+        let rlp_bytes = stream.out();
+        // Prepend type byte 0x02
+        let mut encoded = vec![0x02];
+        encoded.extend_from_slice(&rlp_bytes);
+
+        Ok(ParsedTransaction {
+            parsed: Some(format!("0x{}", hex_encode(&encoded))),
+            original_format: "json".to_string(),
+        })
+    } else {
+        let gas_price = get_str("gasPrice")
+            .or_else(|| get_str("gas_price"))
+            .unwrap_or_else(|| "0x0".to_string());
+
+        // Legacy: RLP([nonce, gasPrice, gasLimit, to, value, data, v, r, s])
+        // For unsigned, v = chainId, r = 0, s = 0 (EIP-155)
+        let mut stream = RlpStream::new_list(9);
+        stream.append(&hex_to_bytes(&nonce));
+        stream.append(&hex_to_bytes(&gas_price));
+        stream.append(&hex_to_bytes(&gas_limit));
+        stream.append(&hex_to_bytes(&to));
+        stream.append(&hex_to_bytes(&value));
+        stream.append(&hex_to_bytes(&data));
+        stream.append(&hex_to_bytes(&chain_id)); // v = chainId for EIP-155
+        let empty: Vec<u8> = vec![];
+        stream.append(&empty); // r = 0
+        stream.append(&empty); // s = 0
+
+        let rlp_bytes = stream.out();
+        Ok(ParsedTransaction {
+            parsed: Some(format!("0x{}", hex_encode(&rlp_bytes))),
+            original_format: "json".to_string(),
+        })
     }
 }
 
@@ -168,6 +284,17 @@ fn parse_sui_transaction_to_base64url(
             parsed: Some(base64url_encode(&bytes)),
             original_format: format,
         }),
+        TransactionInput::Base64String(s) => {
+            let bytes = base64url_decode(&s).or_else(|_| {
+                use base64::engine::general_purpose::STANDARD;
+                use base64::Engine;
+                STANDARD.decode(&s)
+            })?;
+            Ok(ParsedTransaction {
+                parsed: Some(base64url_encode(&bytes)),
+                original_format: "base64".to_string(),
+            })
+        }
         _ => Err(ParseError::UnsupportedFormat("Sui".to_string())),
     }
 }
@@ -194,10 +321,19 @@ fn parse_bitcoin_transaction_to_base64url(
                 original_format: "hex".to_string(),
             })
         }
-        TransactionInput::Base64String(_) => {
+        TransactionInput::Base64String(_) | TransactionInput::JsonObject(_) => {
             Err(ParseError::UnsupportedFormat("Bitcoin".to_string()))
         }
     }
+}
+
+/// Convert a @solana/kit-style transaction (with messageBytes) to raw bytes.
+///
+/// In the TS SDK, `parseSolanaKitTransactionToSolanaWeb3js` wraps a Kit transaction
+/// into a web3.js-compatible object. In Rust, this simply extracts the raw bytes
+/// from the Kit transaction format for further processing.
+pub fn parse_solana_kit_transaction(message_bytes: &[u8]) -> Vec<u8> {
+    message_bytes.to_vec()
 }
 
 /// Encode bytes to lowercase hex string.

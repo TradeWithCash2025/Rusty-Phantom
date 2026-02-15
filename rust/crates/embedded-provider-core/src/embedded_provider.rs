@@ -402,6 +402,79 @@ impl EmbeddedProvider {
         ))
     }
 
+    /// Sign a transaction without broadcasting it.
+    pub async fn sign_transaction(
+        &self,
+        params: &SignTransactionParams,
+    ) -> Result<ParsedTransactionResult, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or("Not connected")?;
+
+        let wallet_id = self.wallet_id.read().await;
+        let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
+
+        let session = self.platform.storage().get_session().await?;
+        let derivation_index = session
+            .as_ref()
+            .and_then(|s| s.account_derivation_index)
+            .unwrap_or(0);
+
+        let encoded = base64url_encode(&params.transaction);
+
+        let raw_response = client
+            .sign_transaction(&phantom_client::SignTransactionParams {
+                wallet_id: wallet_id.clone(),
+                transaction: encoded,
+                network_id: params.network_id.clone(),
+                derivation_index: Some(derivation_index),
+                account: None,
+            })
+            .await?;
+
+        let network_id: phantom_constants::NetworkId =
+            serde_json::from_value(serde_json::Value::String(params.network_id.clone()))
+                .map_err(|e| format!("Invalid network ID: {}", e))?;
+
+        Ok(parse_transaction_response(
+            &raw_response.raw_transaction,
+            network_id,
+            None,
+        ))
+    }
+
+    /// Sign EIP-712 typed data (v4).
+    pub async fn sign_typed_data_v4(
+        &self,
+        params: &SignTypedDataV4Params,
+    ) -> Result<ParsedSignatureResult, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or("Not connected")?;
+
+        let wallet_id = self.wallet_id.read().await;
+        let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
+
+        let session = self.platform.storage().get_session().await?;
+        let derivation_index = session
+            .as_ref()
+            .and_then(|s| s.account_derivation_index)
+            .unwrap_or(0);
+
+        let raw_response = client
+            .ethereum_sign_typed_data(&phantom_client::SignTypedDataParams {
+                wallet_id: wallet_id.clone(),
+                typed_data: params.typed_data.clone(),
+                network_id: params.network_id.clone(),
+                derivation_index: Some(derivation_index),
+            })
+            .await?;
+
+        let network_id: phantom_constants::NetworkId =
+            serde_json::from_value(serde_json::Value::String(params.network_id.clone()))
+                .map_err(|e| format!("Invalid network ID: {}", e))?;
+
+        Ok(parse_sign_message_response(&raw_response, network_id))
+    }
+
     // ========================================================================
     // Private helpers
     // ========================================================================

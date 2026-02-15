@@ -131,9 +131,16 @@ impl EthereumChain for Ethereum {
 
     async fn switch_chain(
         &self,
-        chain_id: u64,
+        chain_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let hex_chain_id = format!("0x{:x}", chain_id);
+        // Normalize to hex: if it's a decimal string or already hex, handle both.
+        let hex_chain_id = if chain_id.starts_with("0x") || chain_id.starts_with("0X") {
+            chain_id.to_lowercase()
+        } else if let Ok(num) = chain_id.parse::<u64>() {
+            format!("0x{:x}", num)
+        } else {
+            chain_id.to_string()
+        };
         operations::switch_chain(self.strategy.as_ref(), &hex_chain_id).await?;
         *self.chain_id.write().await = hex_chain_id;
         Ok(())
@@ -155,6 +162,14 @@ impl EthereumChain for Ethereum {
 
     fn is_connected(&self) -> bool {
         self.strategy.is_connected()
+    }
+
+    fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
+        self.events.add_listener_by_name(event, listener)
+    }
+
+    fn off(&self, event: &str, listener_id: u64) {
+        self.events.remove_listener_by_name(event, listener_id);
     }
 }
 

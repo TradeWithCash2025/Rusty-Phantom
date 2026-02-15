@@ -102,4 +102,13 @@ pub trait SolanaChain: Send + Sync {
         &self,
         network: SolanaNetwork,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Register an event listener.
+    ///
+    /// Supported events: "connect", "disconnect", "accountChanged".
+    /// Returns a listener ID for removal.
+    fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64;
+
+    /// Remove an event listener by ID.
+    fn off(&self, event: &str, listener_id: u64);
 }

@@ -105,6 +105,10 @@ pub fn buy_token_tool() -> ToolHandler {
                     "type": "boolean",
                     "description": "Enable auto slippage calculation"
                 },
+                "base64EncodedTx": {
+                    "type": "boolean",
+                    "description": "Request base64-encoded transaction data in the quote response"
+                },
                 "execute": {
                     "type": "boolean",
                     "description": "If true, sign and send the first quote transaction after fetching"
@@ -163,6 +167,22 @@ async fn handle_buy_token(
         return Err("walletId is required (missing from session and not provided)".into());
     }
 
+    // Validate derivationIndex if provided
+    if let Some(deriv_val) = params.get("derivationIndex") {
+        if !deriv_val.is_null() {
+            match deriv_val.as_f64() {
+                Some(f) => {
+                    if f.fract() != 0.0 || f < 0.0 {
+                        return Err("derivationIndex must be a non-negative integer".into());
+                    }
+                }
+                None => {
+                    return Err("derivationIndex must be a non-negative integer".into());
+                }
+            }
+        }
+    }
+
     let derivation_index = params
         .get("derivationIndex")
         .and_then(|v| v.as_u64())
@@ -198,11 +218,33 @@ async fn handle_buy_token(
         return Err("sellTokenMint is required unless sellTokenIsNative is true".into());
     }
 
+    if sell_token_is_native && sell_token_mint.is_some() {
+        return Err("sellTokenMint must be omitted when sellTokenIsNative is true".into());
+    }
+
+    // Validate mint addresses are valid Solana public keys (base58, 32 bytes)
+    if let Some(mint) = buy_token_mint {
+        if bs58::decode(mint).into_vec().map(|v| v.len()).unwrap_or(0) != 32 {
+            return Err("buyTokenMint must be a valid Solana address".into());
+        }
+    }
+
+    if let Some(mint) = sell_token_mint {
+        if bs58::decode(mint).into_vec().map(|v| v.len()).unwrap_or(0) != 32 {
+            return Err("sellTokenMint must be a valid Solana address".into());
+        }
+    }
+
     let taker = if let Some(t) = params.get("taker").and_then(|v| v.as_str()) {
         t.to_string()
     } else {
         get_solana_address(context, wallet_id, derivation_index).await?
     };
+
+    // Validate taker is a valid Solana address
+    if bs58::decode(&taker).into_vec().map(|v| v.len()).unwrap_or(0) != 32 {
+        return Err("taker must be a valid Solana address".into());
+    }
 
     let exact_out = params
         .get("exactOut")
@@ -267,6 +309,9 @@ async fn handle_buy_token(
     }
 
     if let Some(slippage) = params.get("slippageTolerance").and_then(|v| v.as_f64()) {
+        if !slippage.is_finite() || slippage < 0.0 || slippage > 100.0 {
+            return Err("slippageTolerance must be a number between 0 and 100".into());
+        }
         body["slippageTolerance"] = json!(slippage);
     }
 
@@ -276,6 +321,10 @@ async fn handle_buy_token(
 
     if let Some(auto_slippage) = params.get("autoSlippage").and_then(|v| v.as_bool()) {
         body["autoSlippage"] = json!(auto_slippage);
+    }
+
+    if let Some(base64_encoded_tx) = params.get("base64EncodedTx").and_then(|v| v.as_bool()) {
+        body["base64EncodedTx"] = json!(base64_encoded_tx);
     }
 
     context.logger.info("Requesting quote from API");
@@ -336,15 +385,33 @@ async fn handle_buy_token(
         .and_then(|v| v.as_str())
         .ok_or("Quote response missing transaction data in first quote")?;
 
-    // Decode and re-encode as base64url for the client
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(transaction_data)
-        .or_else(|_| {
-            bs58::decode(transaction_data)
-                .into_vec()
-                .map_err(|e| base64::DecodeError::InvalidByte(0, e.to_string().as_bytes()[0]))
-        })
-        .map_err(|e| format!("Failed to decode transaction data: {}", e))?;
+    // Decode transaction data based on encoding format
+    let base64_encoded_tx = params.get("base64EncodedTx").and_then(|v| v.as_bool()).unwrap_or(false);
+    let decoded: Vec<u8> = if base64_encoded_tx {
+        // If base64EncodedTx is true, decode as base64
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(transaction_data)
+            .map_err(|e| format!("Failed to decode base64 transaction data: {}", e))?;
+        if bytes.is_empty() {
+            return Err("Failed to decode base64 transaction data".into());
+        }
+        bytes
+    } else {
+        // Try base58 first, then fall back to base64
+        if let Ok(bytes) = bs58::decode(transaction_data).into_vec() {
+            bytes
+        } else {
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(transaction_data)
+                .map_err(|e| format!("Failed to decode transaction data: {}", e))?;
+            if bytes.is_empty() {
+                return Err("Failed to decode transaction data".into());
+            }
+            bytes
+        }
+    };
 
     use base64::Engine;
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&decoded);

@@ -108,6 +108,61 @@ impl SolanaEventListeners {
         }
     }
 
+    /// Add an event listener by event name string with a generic JSON callback.
+    /// The callback receives the event data as `serde_json::Value`.
+    pub fn add_listener_by_name(
+        &self,
+        event: &str,
+        callback: Box<dyn Fn(serde_json::Value) + Send + Sync>,
+    ) -> u64 {
+        let cb = Arc::new(callback);
+        let (event_type, phantom_cb) = match event {
+            "connect" => {
+                let cb = cb.clone();
+                (
+                    PhantomEventType::Connect,
+                    PhantomEventCallback::Connect(Arc::new(move |pk: &str| {
+                        cb(serde_json::json!(pk));
+                    })),
+                )
+            }
+            "disconnect" => {
+                let cb = cb.clone();
+                (
+                    PhantomEventType::Disconnect,
+                    PhantomEventCallback::Disconnect(Arc::new(move || {
+                        cb(serde_json::Value::Null);
+                    })),
+                )
+            }
+            "accountChanged" => {
+                let cb = cb.clone();
+                (
+                    PhantomEventType::AccountChanged,
+                    PhantomEventCallback::AccountChanged(Arc::new(move |pk: Option<&str>| {
+                        cb(match pk {
+                            Some(k) => serde_json::json!(k),
+                            None => serde_json::Value::Null,
+                        });
+                    })),
+                )
+            }
+            _ => return 0,
+        };
+        self.add_listener(event_type, phantom_cb) as u64
+    }
+
+    /// Remove an event listener by event name string and ID.
+    pub fn remove_listener_by_name(&self, event: &str, id: u64) {
+        let event_type = match event {
+            "connect" => PhantomEventType::Connect,
+            "disconnect" => PhantomEventType::Disconnect,
+            "accountChanged" => PhantomEventType::AccountChanged,
+            _ => return,
+        };
+        self.remove_listener(event_type, id as usize);
+    }
+
     /// Clear all event listeners.
     pub fn clear_all(&self) {
         let mut listeners = self.listeners.lock().unwrap();

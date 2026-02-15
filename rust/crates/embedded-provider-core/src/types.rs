@@ -80,6 +80,34 @@ pub struct SignAndSendTransactionParams {
 /// Result of a signed transaction (alias for ParsedTransactionResult).
 pub type SignedTransaction = ParsedTransactionResult;
 
+/// Event data emitted when connection starts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectStartEventData {
+    pub provider: EmbeddedProviderAuthType,
+}
+
+/// Event data emitted on successful connection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectEventData {
+    pub wallet_id: String,
+    pub addresses: Vec<WalletAddress>,
+    pub auth_provider: EmbeddedProviderAuthType,
+    pub auth_user_id: Option<String>,
+}
+
+/// Event data emitted on connection error.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectErrorEventData {
+    pub error: String,
+    pub provider: Option<EmbeddedProviderAuthType>,
+}
+
+/// Event data emitted on disconnect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisconnectEventData {
+    pub wallet_id: Option<String>,
+}
+
 /// Authentication provider type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

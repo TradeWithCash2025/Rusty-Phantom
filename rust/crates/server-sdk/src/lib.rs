@@ -12,7 +12,6 @@ use phantom_client::{
 };
 use phantom_constants::{
     analytics::headers as analytics_headers, DEFAULT_WALLET_API_URL,
-    NetworkId,
 };
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
@@ -41,6 +40,8 @@ pub struct ServerSdkConfig {
     pub api_base_url: Option<String>,
     /// API private key (base58 encoded secret key).
     pub api_private_key: String,
+    /// Solana RPC URL (optional, for direct RPC calls).
+    pub solana_rpc_url: Option<String>,
 }
 
 /// Parameters for signing a message on the server.
@@ -329,6 +330,15 @@ impl ServerSdk {
     }
 }
 
-// Re-export from dependencies for convenience
-pub use phantom_client::{self, NetworkId as ClientNetworkId};
+// Re-export from dependencies for convenience (matches TS re-exports)
+pub use phantom_client::{
+    self,
+    derive_submission_config, get_client_network_config, get_derivation_path_for_network,
+    get_network_description, get_network_ids_by_chain, get_supported_network_ids,
+    supports_transaction_submission, AddressFormat, ClientAlgorithm, ClientNetworkConfig,
+    Curve, DerivationPath, NetworkId as ClientNetworkId,
+    SignedTransactionResult, Transaction, Wallet,
+};
+pub use phantom_api_key_stamper::{self as api_key_stamper, ApiKeyStamper as ApiKeyStamperExport};
+pub use phantom_constants::NetworkId;
 pub use phantom_crypto::generate_key_pair;

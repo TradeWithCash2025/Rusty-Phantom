@@ -54,6 +54,7 @@ async fn main() {
         app_id,
         api_base_url: Some(api_base_url.clone()),
         api_private_key,
+        solana_rpc_url: None,
     });
     println!("  Connected to: {}", api_base_url);
     println!("  Organization: {}\n", organization_id);

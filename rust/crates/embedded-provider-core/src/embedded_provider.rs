@@ -3,13 +3,14 @@
 //! Mirrors the TypeScript `EmbeddedProvider` class from
 //! `packages/embedded-provider-core/src/embedded-provider.ts`.
 
-use phantom_base64url::base64url_encode;
-use phantom_client::{PhantomClient, PhantomClientConfig};
+use phantom_base64url::{base64url_encode, string_to_base64url};
+use phantom_client::{AddressFormat, PhantomClient, PhantomClientConfig};
 use phantom_sdk_types::StamperWithKeyManagement;
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
     ParsedTransactionResult,
 };
+use phantom_utils::network::get_chain_prefix;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -341,6 +342,9 @@ impl EmbeddedProvider {
         let wallet_id = self.wallet_id.read().await;
         let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
 
+        // Check if authenticator needs renewal before performing the operation
+        self.ensure_valid_authenticator().await?;
+
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
             .as_ref()
@@ -373,6 +377,9 @@ impl EmbeddedProvider {
 
         let wallet_id = self.wallet_id.read().await;
         let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
+
+        // Check if authenticator needs renewal before performing the operation
+        self.ensure_valid_authenticator().await?;
 
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
@@ -414,6 +421,9 @@ impl EmbeddedProvider {
         let wallet_id = self.wallet_id.read().await;
         let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
 
+        // Check if authenticator needs renewal before performing the operation
+        self.ensure_valid_authenticator().await?;
+
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
             .as_ref()
@@ -454,6 +464,9 @@ impl EmbeddedProvider {
         let wallet_id = self.wallet_id.read().await;
         let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
 
+        // Check if authenticator needs renewal before performing the operation
+        self.ensure_valid_authenticator().await?;
+
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
             .as_ref()
@@ -474,6 +487,226 @@ impl EmbeddedProvider {
                 .map_err(|e| format!("Invalid network ID: {}", e))?;
 
         Ok(parse_sign_message_response(&raw_response, network_id))
+    }
+
+    /// Sign an Ethereum message using EIP-191 personal sign.
+    ///
+    /// Detects hex-encoded input (0x-prefixed) and normalizes it, otherwise
+    /// converts the raw string to base64url before delegating to the client.
+    pub async fn sign_ethereum_message(
+        &self,
+        params: &SignMessageParams,
+    ) -> Result<ParsedSignatureResult, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or("Not connected")?;
+
+        let wallet_id = self.wallet_id.read().await;
+        let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
+
+        // Check if authenticator needs renewal before performing the operation
+        self.ensure_valid_authenticator().await?;
+
+        self.logger.info(
+            "EMBEDDED_PROVIDER",
+            "Signing Ethereum message",
+            Some(&serde_json::json!({
+                "walletId": wallet_id,
+                "message": params.message,
+            })),
+        );
+
+        // Detect hex input (starts with 0x) and normalize
+        let normalized_message = if params.message.starts_with("0x")
+            && params.message[2..].chars().all(|c| c.is_ascii_hexdigit())
+        {
+            let hex_payload = &params.message[2..];
+            // Ensure even-length hex string
+            let padded = if hex_payload.len() % 2 != 0 {
+                format!("0{}", hex_payload)
+            } else {
+                hex_payload.to_string()
+            };
+            // Decode hex manually (no hex crate dependency)
+            let bytes: Vec<u8> = (0..padded.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&padded[i..i + 2], 16))
+                .collect::<Result<Vec<u8>, _>>()
+                .map_err(|e| format!("Invalid hex message: {}", e))?;
+            String::from_utf8(bytes)
+                .map_err(|e| format!("Hex message is not valid UTF-8: {}", e))?
+        } else {
+            params.message.clone()
+        };
+
+        // Convert to base64url format for the client
+        let base64url_message = string_to_base64url(&normalized_message);
+
+        let session = self.platform.storage().get_session().await?;
+        let derivation_index = session
+            .as_ref()
+            .and_then(|s| s.account_derivation_index)
+            .unwrap_or(0);
+
+        let raw_response = client
+            .ethereum_sign_message(&phantom_client::SignMessageParams {
+                wallet_id: wallet_id.clone(),
+                message: base64url_message,
+                network_id: params.network_id.clone(),
+                derivation_index: Some(derivation_index),
+            })
+            .await?;
+
+        let network_id: phantom_constants::NetworkId =
+            serde_json::from_value(serde_json::Value::String(params.network_id.clone()))
+                .map_err(|e| format!("Invalid network ID: {}", e))?;
+
+        Ok(parse_sign_message_response(&raw_response, network_id))
+    }
+
+    /// Ensures the authenticator is valid.
+    ///
+    /// If the authenticator has expired, disconnects the provider and returns
+    /// an error.
+    pub async fn ensure_valid_authenticator(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let session = self.platform.storage().get_session().await?;
+        let session = session.ok_or("No active session found")?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        // Sessions without authenticator timing fields are invalid
+        if session.authenticator_expires_at == 0 {
+            self.logger.warn(
+                "EMBEDDED_PROVIDER",
+                "Session missing authenticator timing - treating as invalid session",
+                None,
+            );
+            self.disconnect(false).await?;
+            return Err("Invalid session - missing authenticator timing".into());
+        }
+
+        let time_until_expiry = if session.authenticator_expires_at > now {
+            session.authenticator_expires_at - now
+        } else {
+            0
+        };
+
+        self.logger.log(
+            "EMBEDDED_PROVIDER",
+            "Checking authenticator expiration",
+            Some(&serde_json::json!({
+                "expiresAt": session.authenticator_expires_at,
+                "timeUntilExpiry": time_until_expiry,
+            })),
+        );
+
+        // Check if authenticator has expired
+        if time_until_expiry == 0 {
+            self.logger.error(
+                "EMBEDDED_PROVIDER",
+                "Authenticator has expired, disconnecting",
+                None,
+            );
+            self.disconnect(false).await?;
+            return Err("Authenticator expired".into());
+        }
+
+        Ok(())
+    }
+
+    /// Validate and clean a session from storage.
+    ///
+    /// Reads the session from storage and validates it. Returns `None` and
+    /// clears storage if the session is invalid (not completed, missing
+    /// wallet_id/organization_id, or expired authenticator).
+    pub async fn validate_and_clean_session(
+        &self,
+    ) -> Option<Session> {
+        let session = match self.platform.storage().get_session().await {
+            Ok(Some(s)) => s,
+            _ => return None,
+        };
+
+        self.logger.log(
+            "EMBEDDED_PROVIDER",
+            "Found existing session, validating",
+            Some(&serde_json::json!({
+                "sessionId": session.session_id,
+                "status": format!("{:?}", session.status),
+                "walletId": session.wallet_id,
+            })),
+        );
+
+        // For completed sessions, validate required fields and expiration
+        if session.status == SessionStatus::Completed {
+            if !self.is_session_valid(&session) {
+                self.logger.warn(
+                    "EMBEDDED_PROVIDER",
+                    "Session invalid due to missing fields or authenticator expiration",
+                    Some(&serde_json::json!({
+                        "sessionId": session.session_id,
+                        "authenticatorExpiresAt": session.authenticator_expires_at,
+                    })),
+                );
+                let _ = self.platform.storage().clear_session().await;
+                return None;
+            }
+            return Some(session);
+        }
+
+        // Non-completed sessions are not usable
+        self.logger.log(
+            "EMBEDDED_PROVIDER",
+            "Session not completed, clearing",
+            Some(&serde_json::json!({
+                "sessionId": session.session_id,
+                "status": format!("{:?}", session.status),
+            })),
+        );
+        let _ = self.platform.storage().clear_session().await;
+        None
+    }
+
+    /// Get the appropriate address for a given network ID from available addresses.
+    ///
+    /// Maps CAIP-2 network ID prefix to address format:
+    /// - "solana" -> AddressFormat::Solana
+    /// - "eip155" -> AddressFormat::Ethereum
+    /// - "sui" -> AddressFormat::Sui
+    /// - "bitcoin"/"bip122" -> None (not yet supported for signing)
+    fn get_address_for_network_sync(
+        &self,
+        network_id: &str,
+        addresses: &[WalletAddress],
+    ) -> Option<String> {
+        let chain = get_chain_prefix(network_id);
+
+        let target_format = match chain.as_str() {
+            "solana" => Some(AddressFormat::Solana),
+            "eip155" => Some(AddressFormat::Ethereum),
+            "sui" => Some(AddressFormat::Sui),
+            // bitcoin/bip122 not currently supported for signing
+            "bitcoin" | "btc" | "bip122" => None,
+            // Default to Ethereum for unknown networks
+            _ => Some(AddressFormat::Ethereum),
+        };
+
+        let target_format = target_format?;
+
+        addresses
+            .iter()
+            .find(|addr| addr.address_type == target_format)
+            .map(|addr| addr.address.clone())
+    }
+
+    /// Get the appropriate address for a given network ID (async, reads from stored addresses).
+    pub async fn get_address_for_network(&self, network_id: &str) -> Option<String> {
+        let addresses = self.addresses.read().await;
+        self.get_address_for_network_sync(network_id, &addresses)
     }
 
     // ========================================================================

@@ -160,6 +160,7 @@ async fn main() {
         app_id,
         api_base_url: Some(api_base_url),
         api_private_key,
+        solana_rpc_url: None,
     });
 
     // Get or create wallet

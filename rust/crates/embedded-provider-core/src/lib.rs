@@ -19,7 +19,8 @@ pub use interfaces::{
     StamperInfo, UrlParamsAccessor,
 };
 pub use types::{
-    AuthOptions, AuthUrlOptions, ConnectResult, ConnectStatus, EmbeddedProviderAuthType,
+    AuthOptions, AuthUrlOptions, ConnectErrorEventData, ConnectEventData, ConnectResult,
+    ConnectStartEventData, ConnectStatus, DisconnectEventData, EmbeddedProviderAuthType,
     EmbeddedProviderConfig, SignAndSendTransactionParams, SignMessageParams, SignMessageResult,
     SignTransactionParams, SignTypedDataV4Params, SignedTransaction, WalletAddress,
 };

@@ -20,6 +20,7 @@ const MAX_NAME_LENGTH: usize = 64;
 ///
 /// Handles all communication with the Phantom KMS RPC API including
 /// wallet creation, transaction signing, and organization management.
+#[derive(Clone)]
 pub struct PhantomClient {
     config: PhantomClientConfig,
     http: reqwest::Client,

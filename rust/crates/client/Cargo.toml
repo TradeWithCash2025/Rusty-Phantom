@@ -3,6 +3,18 @@ name = "phantom-client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Phantom HTTP client for API communication"
+description = "Phantom HTTP client for wallet API communication"
 
 [dependencies]
+phantom-constants = { workspace = true }
+phantom-utils = { workspace = true }
+phantom-base64url = { workspace = true }
+phantom-sdk-types = { workspace = true }
+phantom-parsers = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+once_cell = { workspace = true }

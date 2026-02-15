@@ -3,6 +3,14 @@ name = "phantom-parsers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Parsing utilities for Phantom data formats"
+description = "Parsing utilities for Phantom transaction and message formats"
 
 [dependencies]
+phantom-base64url = { workspace = true }
+phantom-constants = { workspace = true }
+phantom-utils = { workspace = true }
+bs58 = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }

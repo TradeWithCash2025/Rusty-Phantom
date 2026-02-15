@@ -735,6 +735,20 @@ dependencies = [
 [[package]]
 name = "phantom-client"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "once_cell",
+ "phantom-base64url",
+ "phantom-constants",
+ "phantom-parsers",
+ "phantom-sdk-types",
+ "phantom-utils",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
 
 [[package]]
 name = "phantom-client-demo"
@@ -779,6 +793,16 @@ version = "0.1.0"
 [[package]]
 name = "phantom-parsers"
 version = "0.1.0"
+dependencies = [
+ "base64",
+ "bs58",
+ "phantom-base64url",
+ "phantom-constants",
+ "phantom-utils",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "phantom-sdk-types"

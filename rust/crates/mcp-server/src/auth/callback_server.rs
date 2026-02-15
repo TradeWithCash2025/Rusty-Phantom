@@ -3,6 +3,7 @@
 //! Implements a local HTTP server that waits for OAuth callbacks.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -37,6 +38,7 @@ pub struct CallbackServer {
     path: String,
     timeout_ms: u64,
     logger: Logger,
+    is_listening: Arc<AtomicBool>,
 }
 
 impl CallbackServer {
@@ -48,6 +50,7 @@ impl CallbackServer {
             path: options.path,
             timeout_ms: options.timeout_ms,
             logger: Logger::new("CallbackServer"),
+            is_listening: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -69,18 +72,12 @@ impl CallbackServer {
         self.wait_for_callback(expected_state).await
     }
 
-    /// Waits until the callback server's TCP listener is ready.
-    ///
-    /// In the current implementation the listener is bound at the beginning
-    /// of `wait_for_callback`, so by the time the returned future is
-    /// `.await`-ed the socket is already open.  This method is provided for
-    /// API parity with the TypeScript `CallbackServer.waitForListening()`.
-    pub async fn wait_for_listening(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // In the Rust implementation the TcpListener is bound synchronously
-        // at the top of wait_for_callback, so by the time the caller has
-        // a reference to the future the listener is already ready.
-        // This is a no-op but keeps the API surface identical to TS.
-        Ok(())
+    /// Wait until the callback server is listening on its port.
+    pub async fn wait_for_listening(&self) {
+        // If already listening, return immediately
+        while !self.is_listening.load(Ordering::Acquire) {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
     }
 
     /// Start the server and wait for an OAuth callback.
@@ -90,6 +87,7 @@ impl CallbackServer {
     ) -> Result<OAuthCallbackParams, Box<dyn std::error::Error + Send + Sync>> {
         let addr = format!("{}:{}", self.host, self.port);
         let listener = TcpListener::bind(&addr).await?;
+        self.is_listening.store(true, Ordering::Release);
         self.logger
             .info(&format!("Callback server listening on {}", self.get_callback_url()));
 

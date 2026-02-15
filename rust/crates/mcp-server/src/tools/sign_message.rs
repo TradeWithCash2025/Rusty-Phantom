@@ -62,26 +62,15 @@ async fn handle_sign_message(
         return Err("walletId is required (missing from session and not provided)".into());
     }
 
-    // Validate derivationIndex if provided
-    if let Some(deriv_val) = params.get("derivationIndex") {
-        if !deriv_val.is_null() {
-            match deriv_val.as_f64() {
-                Some(f) => {
-                    if f.fract() != 0.0 || f < 0.0 {
-                        return Err("derivationIndex must be a non-negative integer".into());
-                    }
-                }
-                None => {
-                    return Err("derivationIndex must be a non-negative integer".into());
-                }
-            }
+    let derivation_index = match params.get("derivationIndex") {
+        Some(serde_json::Value::Null) | None => None,
+        Some(v) => {
+            let idx = v.as_u64().ok_or_else(|| {
+                format!("derivationIndex must be a non-negative integer, got: {}", v)
+            })?;
+            Some(idx as u32)
         }
-    }
-
-    let derivation_index = params
-        .get("derivationIndex")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+    };
 
     let network_id = normalize_network_id(network_id_raw);
 

@@ -14,8 +14,9 @@ pub mod themes;
 pub mod utils;
 
 pub use themes::{
-    dark_theme, light_theme, merge_theme, merge_theme_native, ComputedPhantomNativeTheme,
-    ComputedPhantomWebTheme, NativeTypography, NativeTypographyStyle, PhantomTheme, WebTypography,
-    WebTypographyStyle, LOGIN_WITH_PHANTOM_COLOR,
+    dark_theme, light_theme, merge_theme, merge_theme_native, merge_theme_native_with_overrides,
+    merge_theme_with_overrides, ComputedPhantomNativeTheme, ComputedPhantomTheme,
+    ComputedPhantomWebTheme, NativeTypography, NativeTypographyStyle, PhantomTheme,
+    PhantomThemeOverride, WebTypography, WebTypographyStyle, LOGIN_WITH_PHANTOM_COLOR,
 };
 pub use utils::hex_to_rgba;

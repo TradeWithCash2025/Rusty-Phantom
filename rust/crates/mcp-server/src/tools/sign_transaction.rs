@@ -67,40 +67,26 @@ async fn handle_sign_transaction(
         return Err("walletId is required (missing from session and not provided)".into());
     }
 
-    // Validate derivationIndex if provided
-    if let Some(deriv_val) = params.get("derivationIndex") {
-        if !deriv_val.is_null() {
-            match deriv_val.as_f64() {
-                Some(f) => {
-                    if f.fract() != 0.0 || f < 0.0 {
-                        return Err("derivationIndex must be a non-negative integer".into());
-                    }
-                }
-                None => {
-                    return Err("derivationIndex must be a non-negative integer".into());
-                }
-            }
+    let derivation_index = match params.get("derivationIndex") {
+        Some(serde_json::Value::Null) | None => None,
+        Some(v) => {
+            let idx = v.as_u64().ok_or_else(|| {
+                format!("derivationIndex must be a non-negative integer, got: {}", v)
+            })?;
+            Some(idx as u32)
         }
-    }
-
-    let derivation_index = params
-        .get("derivationIndex")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
-
-    // Validate account if provided
-    if let Some(account_val) = params.get("account") {
-        if !account_val.is_null() && !account_val.is_string() {
-            return Err("account must be a string".into());
-        }
-    }
+    };
 
     let network_id = normalize_network_id(network_id_raw);
 
-    let mut account = params
-        .get("account")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let mut account = match params.get("account") {
+        Some(serde_json::Value::Null) | None => None,
+        Some(v) => Some(
+            v.as_str()
+                .ok_or("account must be a string")?
+                .to_string(),
+        ),
+    };
 
     if account.is_none() && is_solana_chain(&network_id) {
         account = Some(get_solana_address(context, wallet_id, derivation_index).await?);

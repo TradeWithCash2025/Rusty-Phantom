@@ -167,26 +167,15 @@ async fn handle_buy_token(
         return Err("walletId is required (missing from session and not provided)".into());
     }
 
-    // Validate derivationIndex if provided
-    if let Some(deriv_val) = params.get("derivationIndex") {
-        if !deriv_val.is_null() {
-            match deriv_val.as_f64() {
-                Some(f) => {
-                    if f.fract() != 0.0 || f < 0.0 {
-                        return Err("derivationIndex must be a non-negative integer".into());
-                    }
-                }
-                None => {
-                    return Err("derivationIndex must be a non-negative integer".into());
-                }
-            }
+    let derivation_index = match params.get("derivationIndex") {
+        Some(serde_json::Value::Null) | None => None,
+        Some(v) => {
+            let idx = v.as_u64().ok_or_else(|| {
+                format!("derivationIndex must be a non-negative integer, got: {}", v)
+            })?;
+            Some(idx as u32)
         }
-    }
-
-    let derivation_index = params
-        .get("derivationIndex")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+    };
 
     let amount_unit = params
         .get("amountUnit")
@@ -212,6 +201,10 @@ async fn handle_buy_token(
 
     if !buy_token_is_native && buy_token_mint.is_none() {
         return Err("buyTokenMint is required unless buyTokenIsNative is true".into());
+    }
+
+    if buy_token_is_native && buy_token_mint.is_some() {
+        return Err("buyTokenMint must be omitted when buyTokenIsNative is true".into());
     }
 
     if !sell_token_is_native && sell_token_mint.is_none() {

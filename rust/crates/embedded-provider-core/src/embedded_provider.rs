@@ -677,9 +677,9 @@ impl EmbeddedProvider {
             wallet_type: self.config.embedded_wallet_type.clone(),
         };
 
-        // NOTE: In a full implementation, we would pass the stamper to PhantomClient.
-        // For now, create without stamper as the Stamper trait integration differs.
-        let new_client = PhantomClient::new(config, None);
+        // Pass the platform stamper to PhantomClient for request signing.
+        let stamper = self.platform.stamper_for_client();
+        let new_client = PhantomClient::new(config, stamper);
 
         *self.client.write().await = Some(new_client);
         *self.wallet_id.write().await = Some(session.wallet_id.clone());
@@ -696,15 +696,23 @@ impl EmbeddedProvider {
                 .into_iter()
                 .filter(|addr| {
                     self.config.address_types.iter().any(|t| {
-                        let t_str = serde_json::to_string(t).unwrap_or_default();
-                        let a_str = &addr.address_type;
-                        t_str.trim_matches('"') == *a_str
+                        // Compare the address format string representation with the
+                        // raw address_type returned by the API.
+                        match serde_json::to_value(t) {
+                            Ok(v) => v.as_str().map_or(false, |s| s == addr.address_type),
+                            Err(_) => false,
+                        }
                     })
                 })
-                .map(|addr| WalletAddress {
-                    address_type: serde_json::from_str(&format!("\"{}\"", addr.address_type))
-                        .unwrap_or(crate::constants::AddressFormat::Ethereum),
-                    address: addr.address,
+                .map(|addr| {
+                    let parsed_type = serde_json::from_value(
+                        serde_json::Value::String(addr.address_type.clone()),
+                    )
+                    .unwrap_or(crate::constants::AddressFormat::Ethereum);
+                    WalletAddress {
+                        address_type: parsed_type,
+                        address: addr.address,
+                    }
                 })
                 .collect();
 

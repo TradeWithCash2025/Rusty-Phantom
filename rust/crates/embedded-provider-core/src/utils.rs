@@ -80,7 +80,12 @@ where
         }
     }
 
-    Err(last_error.expect("retry loop should have set last_error"))
+    // Safety: The loop always sets `last_error` before breaking, so the
+    // None branch is unreachable. We match explicitly to avoid panic paths.
+    match last_error {
+        Some(e) => Err(e),
+        None => unreachable!("retry loop should always set last_error before exiting"),
+    }
 }
 
 /// Generate a unique session ID with timestamp.

@@ -3,6 +3,7 @@
 //! Combines embedded and injected providers behind a unified API,
 //! with wallet discovery, debug logging, and auto-confirm support.
 
+use phantom_browser_injected_sdk::ExtensionDetector;
 use phantom_embedded_provider_core::WalletAddress;
 
 use crate::debug::{debug, DebugCategory, DebugCallback, DebugLevel};
@@ -175,5 +176,80 @@ impl BrowserSdk {
         if let Some(cb) = callback {
             self.set_debug_callback(cb);
         }
+    }
+}
+
+/// Wait for Phantom extension to be available with retry logic.
+///
+/// Polls for the Phantom extension every 100ms until it is detected or
+/// the timeout is reached.
+///
+/// # Arguments
+/// * `detector` - Extension detector implementation (platform-provided).
+/// * `timeout_ms` - Maximum time to wait in milliseconds (default: 3000).
+///
+/// # Returns
+/// `true` if the Phantom extension is available, `false` if the timeout is reached.
+pub async fn wait_for_phantom_extension(
+    detector: &dyn ExtensionDetector,
+    timeout_ms: u64,
+) -> bool {
+    let start = std::time::Instant::now();
+    let check_interval = std::time::Duration::from_millis(100);
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+
+    loop {
+        if detector.is_installed() {
+            return true;
+        }
+
+        if start.elapsed() >= timeout {
+            return false;
+        }
+
+        tokio::time::sleep(check_interval).await;
+    }
+}
+
+/// Features response from the Phantom extension.
+pub trait PhantomFeaturesProvider: Send + Sync {
+    /// Query available features from the Phantom extension.
+    ///
+    /// Returns a list of feature identifiers (e.g., `["phantom_login"]`).
+    fn features(
+        &self,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>> + Send + '_>,
+    >;
+}
+
+/// Check if Phantom Login is available.
+///
+/// This function checks if:
+/// 1. The Phantom extension is installed (via detector)
+/// 2. The extension supports the `phantom_login` feature (via features provider)
+///
+/// # Arguments
+/// * `detector` - Extension detector implementation.
+/// * `features_provider` - Provider for querying extension features.
+/// * `timeout_ms` - Maximum time to wait for extension in milliseconds (default: 3000).
+///
+/// # Returns
+/// `true` if Phantom Login is available, `false` otherwise.
+pub async fn is_phantom_login_available(
+    detector: &dyn ExtensionDetector,
+    features_provider: &dyn PhantomFeaturesProvider,
+    timeout_ms: u64,
+) -> bool {
+    // First, wait for the extension to be installed
+    let extension_installed = wait_for_phantom_extension(detector, timeout_ms).await;
+    if !extension_installed {
+        return false;
+    }
+
+    // Check if the features API returns phantom_login
+    match features_provider.features().await {
+        Ok(features) => features.iter().any(|f| f == "phantom_login"),
+        Err(_) => false,
     }
 }

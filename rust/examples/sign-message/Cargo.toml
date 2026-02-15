@@ -1,0 +1,17 @@
+[package]
+name = "phantom-sign-message"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Demo: sign a message using a Phantom wallet"
+
+[[bin]]
+name = "phantom-sign-message"
+path = "src/main.rs"
+
+[dependencies]
+phantom-server-sdk = { workspace = true }
+phantom-constants = { workspace = true }
+
+serde_json = { workspace = true }
+tokio = { workspace = true }

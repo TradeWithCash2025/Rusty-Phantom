@@ -29,12 +29,26 @@ impl Extension {
 }
 
 /// Create an extension detection plugin.
-pub fn create_extension_plugin(_detector: Box<dyn ExtensionDetector>) -> Plugin {
+///
+/// The returned `Plugin` wraps the given detector so callers can
+/// query whether the Phantom extension is installed at runtime.
+pub fn create_extension_plugin(detector: Box<dyn ExtensionDetector>) -> Plugin {
+    let extension = Extension::new(detector);
     Plugin {
         name: "extension".to_string(),
-        create: Box::new(move || Box::new(NoopExtension)),
+        create: Box::new(move || Box::new(ExtensionPluginInstance { is_installed: extension.is_installed() })),
     }
 }
 
-/// No-op extension for when no detector is provided.
-struct NoopExtension;
+/// Runtime plugin instance storing the extension detection result.
+struct ExtensionPluginInstance {
+    is_installed: bool,
+}
+
+impl ExtensionPluginInstance {
+    /// Check whether the Phantom extension is installed.
+    #[allow(dead_code)]
+    fn is_installed(&self) -> bool {
+        self.is_installed
+    }
+}

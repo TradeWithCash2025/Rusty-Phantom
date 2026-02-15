@@ -14,7 +14,9 @@ pub mod utils;
 pub mod wallets;
 
 // Re-export main types
-pub use browser_sdk::BrowserSdk;
+pub use browser_sdk::{
+    is_phantom_login_available, wait_for_phantom_extension, BrowserSdk, PhantomFeaturesProvider,
+};
 pub use debug::{debug, DebugCategory, DebugLevel};
 pub use provider_manager::ProviderPreference;
 pub use types::{

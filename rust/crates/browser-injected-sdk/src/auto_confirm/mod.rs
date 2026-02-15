@@ -6,6 +6,7 @@
 use crate::Plugin;
 use phantom_constants::NetworkId;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // ============================================================================
 // Types
@@ -112,12 +113,15 @@ impl AutoConfirm {
 }
 
 /// Create an auto-confirm plugin for the Phantom instance.
-pub fn create_auto_confirm_plugin(_provider: Box<dyn AutoConfirmProvider>) -> Plugin {
+///
+/// The returned `Plugin` wraps the given provider so callers can
+/// enable/disable/query auto-confirm at runtime. The `AutoConfirm`
+/// instance is created once and shared via `Arc` across multiple
+/// calls to the plugin factory.
+pub fn create_auto_confirm_plugin(provider: Box<dyn AutoConfirmProvider>) -> Plugin {
+    let auto_confirm = Arc::new(AutoConfirm::new(provider));
     Plugin {
         name: "autoConfirm".to_string(),
-        create: Box::new(move || Box::new(NoopAutoConfirm)),
+        create: Box::new(move || Box::new(auto_confirm.clone())),
     }
 }
-
-/// No-op placeholder (actual logic goes through AutoConfirm struct).
-struct NoopAutoConfirm;

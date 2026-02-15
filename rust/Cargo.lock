@@ -924,6 +924,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "phantom-list-wallets"
+version = "0.1.0"
+dependencies = [
+ "phantom-server-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "phantom-mcp-server"
 version = "0.1.0"
 dependencies = [
@@ -944,6 +953,20 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "phantom-multi-auth-demo"
+version = "0.1.0"
+dependencies = [
+ "bs58",
+ "phantom-api-key-stamper",
+ "phantom-base64url",
+ "phantom-client",
+ "phantom-crypto",
+ "phantom-sdk-types",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1007,6 +1030,16 @@ version = "0.1.0"
 dependencies = [
  "phantom-constants",
  "phantom-crypto",
+ "phantom-server-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "phantom-sign-message"
+version = "0.1.0"
+dependencies = [
+ "phantom-constants",
  "phantom-server-sdk",
  "serde_json",
  "tokio",

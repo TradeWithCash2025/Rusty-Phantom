@@ -20,6 +20,9 @@ members = [
     "crates/ui",
     "examples/client-demo",
     "examples/server-sdk-demo",
+    "examples/multi-auth-demo",
+    "examples/list-wallets",
+    "examples/sign-message",
 ]
 
 [workspace.package]

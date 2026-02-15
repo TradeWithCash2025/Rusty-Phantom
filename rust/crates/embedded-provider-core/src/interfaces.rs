@@ -221,6 +221,15 @@ pub trait PlatformAdapter: Send + Sync {
     /// Stamper with key management.
     fn stamper(&self) -> &dyn StamperWithKeyManagement;
 
+    /// Get the stamper as an `Arc<dyn Stamper>` for passing to `PhantomClient`.
+    ///
+    /// Platform implementations should return their internal `Arc`-wrapped stamper.
+    /// This bridges the `StamperWithKeyManagement` reference to an owned
+    /// `Arc<dyn Stamper>` required by `PhantomClient::new()`.
+    fn stamper_for_client(&self) -> Option<std::sync::Arc<dyn phantom_sdk_types::Stamper>> {
+        None
+    }
+
     /// Optional analytics headers.
     fn analytics_headers(&self) -> Option<HashMap<String, String>> {
         None

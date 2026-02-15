@@ -6,11 +6,11 @@
 use super::events::EthereumEventListeners;
 use super::operations;
 use super::strategy::EthereumStrategy;
-use super::types::EthereumTransaction;
+use super::types::{EthereumEventType, EthereumTransaction};
 use crate::Plugin;
 use phantom_chain_interfaces::{EthTransactionRequest, EthereumChain};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 
 /// Phantom Ethereum chain implementation that is EIP-1193 compliant.
 ///
@@ -18,36 +18,150 @@ use tokio::sync::RwLock;
 pub struct Ethereum {
     strategy: Arc<dyn EthereumStrategy>,
     events: Arc<EthereumEventListeners>,
+    /// Stored behind `std::sync::RwLock` so that synchronous trait methods and
+    /// `handle_provider_event` can access it without an async runtime.
     chain_id: RwLock<String>,
+    /// Stored behind `std::sync::RwLock` for the same reason as `chain_id`.
     accounts: RwLock<Vec<String>>,
 }
 
 impl Ethereum {
     /// Create a new Ethereum instance with the given strategy.
+    ///
+    /// Internally calls [`bind_provider_events`](Self::bind_provider_events) to
+    /// prepare the event bridge (matching the TS constructor behaviour).
     pub fn new(strategy: Arc<dyn EthereumStrategy>) -> Self {
-        Self {
+        let instance = Self {
             strategy,
             events: Arc::new(EthereumEventListeners::new()),
             chain_id: RwLock::new("0x1".to_string()),
             accounts: RwLock::new(vec![]),
-        }
+        };
+        instance.bind_provider_events();
+        instance
     }
 
     /// Get a reference to the event listener registry.
     pub fn events(&self) -> &EthereumEventListeners {
         &self.events
     }
+
+    /// Prepare the native provider event bridge.
+    ///
+    /// In a browser context the TS `Ethereum` constructor calls `bindProviderEvents()`
+    /// to forward native wallet events (`connect`, `disconnect`, `accountsChanged`,
+    /// `chainChanged`) into the SDK event system.  In Rust we cannot register
+    /// native listeners directly, so the actual bridging is performed by the
+    /// platform layer calling [`handle_provider_event`](Self::handle_provider_event).
+    /// This method exists to mirror the TS constructor flow and can be extended
+    /// later when a platform bridge is available.
+    fn bind_provider_events(&self) {
+        // Platform-specific event registration would go here.
+        // For now, the platform layer is expected to call `handle_provider_event`
+        // when the native wallet provider emits events.
+    }
+
+    /// Handle a native provider event, bridging it to SDK event listeners.
+    ///
+    /// Platform code should call this when the native wallet provider emits events.
+    ///
+    /// Supported events:
+    /// - `"connect"` -- triggers the connect event with the provided data.
+    /// - `"disconnect"` -- clears accounts, triggers disconnect with
+    ///   `ProviderRpcError { code: 4900, message: "Provider disconnected" }`.
+    /// - `"accountsChanged"` -- `data` should be a JSON array of account strings.
+    ///   Updates internal accounts and triggers `accountsChanged`. If the new
+    ///   account list is non-empty, also triggers `connect` (dual-trigger
+    ///   behaviour matching the TS implementation).
+    /// - `"chainChanged"` -- `data` should contain the new chain ID string.
+    ///   Updates internal chain ID and triggers `chainChanged`.
+    pub fn handle_provider_event(&self, event: &str, data: serde_json::Value) {
+        match event {
+            "connect" => {
+                // In TS: fetches accounts and updates state.
+                // Here we just trigger the event; account fetching should be done
+                // by the caller.
+                self.events
+                    .trigger_event(EthereumEventType::Connect, data);
+            }
+            "disconnect" => {
+                if let Ok(mut guard) = self.accounts.write() {
+                    guard.clear();
+                }
+                // TS creates ProviderRpcError { code: 4900, message: "Provider disconnected" }
+                let error_data = serde_json::json!({
+                    "code": 4900,
+                    "message": "Provider disconnected"
+                });
+                self.events
+                    .trigger_event(EthereumEventType::Disconnect, error_data);
+            }
+            "accountsChanged" => {
+                if let Ok(accounts) = serde_json::from_value::<Vec<String>>(data.clone()) {
+                    let has_accounts = !accounts.is_empty();
+                    if let Ok(mut guard) = self.accounts.write() {
+                        *guard = accounts;
+                    }
+                    self.events
+                        .trigger_event(EthereumEventType::AccountsChanged, data.clone());
+                    // Dual-trigger: if accounts exist, also trigger connect
+                    if has_accounts {
+                        self.events
+                            .trigger_event(EthereumEventType::Connect, data);
+                    }
+                }
+            }
+            "chainChanged" => {
+                if let Some(chain_id) = data.as_str() {
+                    if let Ok(mut guard) = self.chain_id.write() {
+                        *guard = chain_id.to_string();
+                    }
+                }
+                self.events
+                    .trigger_event(EthereumEventType::ChainChanged, data);
+            }
+            _ => {}
+        }
+    }
+
+    /// Return an owned copy of the current chain ID.
+    ///
+    /// The [`EthereumChain::chain_id`] trait method returns `&str`, which cannot
+    /// borrow through the internal lock.  Use this method when you need the
+    /// actual runtime value.
+    pub fn get_chain_id_owned(&self) -> String {
+        self.chain_id
+            .read()
+            .map(|guard| guard.clone())
+            .unwrap_or_else(|_| "0x1".to_string())
+    }
+
+    /// Return an owned copy of the current accounts list.
+    ///
+    /// The [`EthereumChain::accounts`] trait method returns `&[String]`, which
+    /// cannot borrow through the internal lock.  Use this method when you need
+    /// the actual runtime value.
+    pub fn get_accounts_owned(&self) -> Vec<String> {
+        self.accounts
+            .read()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
+    }
 }
 
 #[async_trait::async_trait]
 impl EthereumChain for Ethereum {
     fn chain_id(&self) -> &str {
-        // Can't return reference to RwLock data; return default
+        // The trait requires `&str`, but we cannot return a reference to data
+        // behind a lock guard whose lifetime is shorter than `&self`.
+        // Use `Ethereum::get_chain_id_owned()` to obtain an owned `String`.
         "0x1"
     }
 
     fn accounts(&self) -> &[String] {
-        // Can't return reference to RwLock data; return empty
+        // The trait requires `&[String]`, but we cannot return a reference to
+        // data behind a lock guard whose lifetime is shorter than `&self`.
+        // Use `Ethereum::get_accounts_owned()` to obtain an owned `Vec<String>`.
         &[]
     }
 
@@ -61,14 +175,18 @@ impl EthereumChain for Ethereum {
 
     async fn connect(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let accounts =
-            operations::connect(self.strategy.as_ref(), &self.events).await?;
-        *self.accounts.write().await = accounts.clone();
+            operations::connect(self.strategy.as_ref(), &self.events, false).await?;
+        if let Ok(mut guard) = self.accounts.write() {
+            *guard = accounts.clone();
+        }
         Ok(accounts)
     }
 
     async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         operations::disconnect(self.strategy.as_ref(), &self.events).await?;
-        *self.accounts.write().await = vec![];
+        if let Ok(mut guard) = self.accounts.write() {
+            *guard = vec![];
+        }
         Ok(())
     }
 
@@ -142,7 +260,9 @@ impl EthereumChain for Ethereum {
             chain_id.to_string()
         };
         operations::switch_chain(self.strategy.as_ref(), &hex_chain_id).await?;
-        *self.chain_id.write().await = hex_chain_id;
+        if let Ok(mut guard) = self.chain_id.write() {
+            *guard = hex_chain_id;
+        }
         Ok(())
     }
 
@@ -150,13 +270,17 @@ impl EthereumChain for Ethereum {
         let chain_id_hex = operations::get_chain_id(self.strategy.as_ref()).await?;
         let chain_id_str = chain_id_hex.trim_start_matches("0x");
         let parsed = u64::from_str_radix(chain_id_str, 16)?;
-        *self.chain_id.write().await = chain_id_hex;
+        if let Ok(mut guard) = self.chain_id.write() {
+            *guard = chain_id_hex;
+        }
         Ok(parsed)
     }
 
     async fn get_accounts(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let accounts = operations::get_accounts(self.strategy.as_ref()).await?;
-        *self.accounts.write().await = accounts.clone();
+        if let Ok(mut guard) = self.accounts.write() {
+            *guard = accounts.clone();
+        }
         Ok(accounts)
     }
 

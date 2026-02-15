@@ -12,7 +12,7 @@ use phantom_chain_interfaces::{
     SolanaSignMessageResult, SolanaSendTransactionResult, SolanaSendAllTransactionsResult,
 };
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 
 /// Phantom Solana chain implementation that implements `SolanaChain`.
 ///
@@ -20,32 +20,105 @@ use tokio::sync::RwLock;
 pub struct Solana {
     strategy: Arc<dyn SolanaStrategy>,
     events: Arc<SolanaEventListeners>,
+    /// Stored behind `std::sync::RwLock` so that synchronous trait methods and
+    /// `handle_provider_event` can access it without an async runtime.
     public_key: RwLock<Option<String>>,
 }
 
 impl Solana {
     /// Create a new Solana instance with the given strategy.
+    ///
+    /// Internally calls [`bind_provider_events`](Self::bind_provider_events) to
+    /// prepare the event bridge (matching the TS constructor behaviour).
     pub fn new(strategy: Arc<dyn SolanaStrategy>) -> Self {
-        Self {
+        let instance = Self {
             strategy,
             events: Arc::new(SolanaEventListeners::new()),
             public_key: RwLock::new(None),
-        }
+        };
+        instance.bind_provider_events();
+        instance
     }
 
     /// Get a reference to the event listener registry.
     pub fn events(&self) -> &SolanaEventListeners {
         &self.events
     }
+
+    /// Prepare the native provider event bridge.
+    ///
+    /// In a browser context the TS `Solana` constructor calls `bindProviderEvents()`
+    /// to forward native wallet events (`connect`, `disconnect`, `accountChanged`)
+    /// into the SDK event system.  In Rust we cannot register native listeners
+    /// directly, so the actual bridging is performed by the platform layer calling
+    /// [`handle_provider_event`](Self::handle_provider_event).  This method exists
+    /// to mirror the TS constructor flow and can be extended later when a platform
+    /// bridge is available.
+    fn bind_provider_events(&self) {
+        // Platform-specific event registration would go here.
+        // For now, the platform layer is expected to call `handle_provider_event`
+        // when the native wallet provider emits events.
+    }
+
+    /// Handle a native provider event, bridging it to SDK event listeners.
+    ///
+    /// Platform code should call this when the native wallet provider emits events.
+    ///
+    /// Supported events:
+    /// - `"connect"` — `data` should contain the public key string.
+    /// - `"disconnect"` — `data` is ignored.
+    /// - `"accountChanged"` — `data` may contain the new public key (or `None`).
+    ///   Triggers **both** `accountChanged` and `connect` events (dual-trigger
+    ///   behaviour matching the TS implementation).
+    pub fn handle_provider_event(&self, event: &str, data: Option<&str>) {
+        match event {
+            "connect" => {
+                if let Some(pk) = data {
+                    if let Ok(mut guard) = self.public_key.write() {
+                        *guard = Some(pk.to_string());
+                    }
+                    self.events.trigger_connect(pk);
+                }
+            }
+            "disconnect" => {
+                if let Ok(mut guard) = self.public_key.write() {
+                    *guard = None;
+                }
+                self.events.trigger_disconnect();
+            }
+            "accountChanged" => {
+                if let Ok(mut guard) = self.public_key.write() {
+                    *guard = data.map(|s| s.to_string());
+                }
+                // Dual-trigger: accountChanged AND connect (matching TS behavior)
+                self.events.trigger_account_changed(data);
+                if let Some(pk) = data {
+                    self.events.trigger_connect(pk);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Return an owned copy of the current public key.
+    ///
+    /// The [`SolanaChain::public_key`] trait method returns `Option<&str>`, which
+    /// cannot borrow through the internal lock.  Use this method when you need
+    /// the actual runtime value.
+    pub fn get_public_key(&self) -> Option<String> {
+        self.public_key
+            .read()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
 }
 
 #[async_trait::async_trait]
 impl SolanaChain for Solana {
     fn public_key(&self) -> Option<&str> {
-        // We can't return a reference to data behind RwLock.
-        // The trait requires Option<&str>, so we need a workaround.
-        // Since the trait is from chain-interfaces, we return None here
-        // and provide a separate async method for getting the public key.
+        // The trait requires `Option<&str>`, but we cannot return a reference to
+        // data behind a lock guard whose lifetime is shorter than `&self`.
+        // Use `Solana::get_public_key()` to obtain an owned `Option<String>`.
         None
     }
 
@@ -65,7 +138,9 @@ impl SolanaChain for Solana {
         let address =
             operations::connect(self.strategy.as_ref(), &self.events, only_if_trusted).await?;
 
-        *self.public_key.write().await = Some(address.clone());
+        if let Ok(mut guard) = self.public_key.write() {
+            *guard = Some(address.clone());
+        }
 
         Ok(SolanaConnectResult {
             public_key: address,
@@ -74,7 +149,9 @@ impl SolanaChain for Solana {
 
     async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         operations::disconnect(self.strategy.as_ref(), &self.events).await?;
-        *self.public_key.write().await = None;
+        if let Ok(mut guard) = self.public_key.write() {
+            *guard = None;
+        }
         Ok(())
     }
 
@@ -87,10 +164,10 @@ impl SolanaChain for Solana {
 
         let public_key = result.address.clone();
         if public_key.is_empty() {
-            if let Some(pk) = self.public_key.read().await.as_ref() {
+            if let Some(pk) = self.public_key.read().ok().and_then(|g| g.clone()) {
                 return Ok(SolanaSignMessageResult {
                     signature: result.signature,
-                    public_key: pk.clone(),
+                    public_key: pk,
                 });
             }
         }

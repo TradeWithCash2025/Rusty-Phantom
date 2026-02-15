@@ -8,9 +8,14 @@ use super::strategy::EthereumStrategy;
 use super::types::*;
 
 /// Connect to the Ethereum wallet.
+///
+/// When `only_if_trusted` is `true`, the function will only attempt an eager
+/// (silent) connection and return an error if no trusted session is available,
+/// rather than prompting the user.
 pub async fn connect(
     strategy: &dyn EthereumStrategy,
     events: &EthereumEventListeners,
+    only_if_trusted: bool,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     if strategy.is_connected() {
         return strategy.get_accounts().await;
@@ -25,6 +30,11 @@ pub async fn connect(
             );
             return Ok(accounts);
         }
+    }
+
+    // If only_if_trusted, do not prompt – return an error instead.
+    if only_if_trusted {
+        return Err("No trusted connection available.".into());
     }
 
     // Prompt user to connect

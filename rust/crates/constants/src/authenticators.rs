@@ -9,6 +9,9 @@ pub enum Algorithm {
     /// Ed25519 elliptic curve digital signature algorithm.
     #[serde(rename = "ed25519")]
     Ed25519,
+    /// ECDSA with the P-256 (secp256r1) curve.
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 /// Default authenticator algorithm — Ed25519.

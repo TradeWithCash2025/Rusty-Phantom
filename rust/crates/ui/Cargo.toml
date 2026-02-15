@@ -3,6 +3,7 @@ name = "phantom-ui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI components for Phantom"
+description = "UI theme definitions and utilities for Phantom"
 
 [dependencies]
+serde = { workspace = true }

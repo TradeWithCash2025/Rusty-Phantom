@@ -900,6 +900,16 @@ dependencies = [
 [[package]]
 name = "phantom-indexed-db-stamper"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bs58",
+ "phantom-base64url",
+ "phantom-constants",
+ "phantom-sdk-types",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "phantom-mcp-server"
@@ -986,6 +996,9 @@ version = "0.1.0"
 [[package]]
 name = "phantom-ui"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "phantom-utils"

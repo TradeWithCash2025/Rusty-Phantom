@@ -10,6 +10,86 @@ use crate::utils::solana::get_solana_address;
 
 const DEFAULT_QUOTES_API_URL: &str = "https://api.phantom.app/swap/v2/quotes";
 
+/// Default Solana RPC URLs keyed by swapper chain ID.
+const DEFAULT_SOLANA_RPC_URLS: &[(&str, &str)] = &[
+    ("solana:101", "https://api.mainnet-beta.solana.com"),
+    ("solana:103", "https://api.devnet.solana.com"),
+    ("solana:102", "https://api.testnet.solana.com"),
+];
+
+/// Resolve the Solana RPC URL for on-chain lookups.
+///
+/// Priority: override parameter > default URL for chain ID.
+fn resolve_solana_rpc_url(chain_id: &str, override_url: Option<&str>) -> Result<String, String> {
+    if let Some(url) = override_url {
+        if !url.is_empty() {
+            validate_https_url(url, "Solana RPC")?;
+            return Ok(url.to_string());
+        }
+    }
+    for &(id, url) in DEFAULT_SOLANA_RPC_URLS {
+        if id == chain_id {
+            return Ok(url.to_string());
+        }
+    }
+    let supported: Vec<&str> = DEFAULT_SOLANA_RPC_URLS.iter().map(|(id, _)| *id).collect();
+    Err(format!(
+        "rpcUrl is required for chainId \"{}\". Supported defaults: {}",
+        chain_id,
+        supported.join(", ")
+    ))
+}
+
+/// Fetch SPL token mint decimals from chain via getAccountInfo RPC call.
+async fn get_mint_decimals(
+    rpc_url: &str,
+    mint_address: &str,
+) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    let client = reqwest::Client::new();
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getAccountInfo",
+        "params": [mint_address, {"encoding": "base64", "commitment": "confirmed"}],
+    });
+
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+
+    if let Some(err) = resp.get("error") {
+        return Err(format!("RPC error: {}", err).into());
+    }
+
+    let result = resp
+        .get("result")
+        .ok_or("RPC response missing 'result' field")?;
+
+    let data_str = result
+        .get("value")
+        .and_then(|v| v.get("data"))
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.as_str())
+        .ok_or("Failed to fetch mint account data")?;
+
+    use base64::Engine;
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(data_str)
+        .map_err(|e| format!("Failed to decode mint account data: {}", e))?;
+
+    // SPL Mint layout: decimals is at offset 44 (1 byte)
+    if data.len() < 82 {
+        return Err("Mint account data too short".into());
+    }
+    Ok(data[44] as u32)
+}
+
 /// Validate that a URL uses HTTPS protocol.
 fn validate_https_url(url: &str, context_name: &str) -> Result<(), String> {
     if !url.starts_with("https://") {
@@ -248,24 +328,42 @@ async fn handle_buy_token(
     let amount_base_units = if amount_unit == "base" {
         parse_base_unit_amount(amount_str)?
     } else {
-        let decimals = if exact_out {
+        let decimals: u32 = if exact_out {
             if buy_token_is_native {
                 9
+            } else if let Some(d) = params
+                .get("buyTokenDecimals")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+            {
+                d
+            } else if let Some(mint) = buy_token_mint {
+                // Auto-fetch decimals from chain
+                let rpc_url = resolve_solana_rpc_url(
+                    &swapper_chain_id,
+                    params.get("rpcUrl").and_then(|v| v.as_str()),
+                )?;
+                get_mint_decimals(&rpc_url, mint).await?
             } else {
-                params
-                    .get("buyTokenDecimals")
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as u32)
-                    .ok_or("buyTokenDecimals is required for UI amount with exactOut")?
+                return Err("buyTokenMint is required to lookup decimals".into());
             }
         } else if sell_token_is_native {
             9
+        } else if let Some(d) = params
+            .get("sellTokenDecimals")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+        {
+            d
+        } else if let Some(mint) = sell_token_mint {
+            // Auto-fetch decimals from chain
+            let rpc_url = resolve_solana_rpc_url(
+                &swapper_chain_id,
+                params.get("rpcUrl").and_then(|v| v.as_str()),
+            )?;
+            get_mint_decimals(&rpc_url, mint).await?
         } else {
-            params
-                .get("sellTokenDecimals")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as u32)
-                .ok_or("sellTokenDecimals is required for UI amount")?
+            return Err("sellTokenMint is required to lookup decimals".into());
         };
         parse_ui_amount(amount_str, decimals)?
     };

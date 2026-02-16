@@ -70,7 +70,7 @@ pub struct BrowserPlatformAdapter {
     storage: BrowserStorage,
     auth_provider: BrowserAuthProvider,
     phantom_app_provider: BrowserPhantomAppProvider,
-    url_params: BrowserURLParamsAccessor,
+    url_params: Arc<dyn UrlParamsAccessor>,
     stamper: Box<dyn StamperWithKeyManagement>,
     stamper_arc: Option<Arc<dyn phantom_sdk_types::Stamper>>,
     analytics_headers: Option<HashMap<String, String>>,
@@ -83,23 +83,27 @@ impl BrowserPlatformAdapter {
     /// * `config` - Platform configuration. Only `stamper` is required;
     ///   all other fields have sensible defaults.
     pub fn new(config: BrowserPlatformConfig) -> Self {
+        let url_params = match config.url_params {
+            Some(params) => BrowserURLParamsAccessor::from_params(params),
+            None => BrowserURLParamsAccessor::new(),
+        };
+
+        // Wrap in Arc so the auth provider and platform adapter can share it.
+        let url_params_arc: Arc<dyn UrlParamsAccessor> = Arc::new(url_params);
+
         let auth_config = BrowserAuthConfig {
             redirect_handler: config.redirect_handler,
             redirect_url: config.redirect_url,
             auth_url: config.auth_url,
             redirect_result: None,
-        };
-
-        let url_params = match config.url_params {
-            Some(params) => BrowserURLParamsAccessor::from_params(params),
-            None => BrowserURLParamsAccessor::new(),
+            url_params: url_params_arc.clone(),
         };
 
         Self {
             storage: BrowserStorage::new(config.storage_dir),
             auth_provider: BrowserAuthProvider::new(auth_config),
             phantom_app_provider: BrowserPhantomAppProvider::new(),
-            url_params,
+            url_params: url_params_arc,
             stamper: config.stamper,
             stamper_arc: config.stamper_arc,
             analytics_headers: config.analytics_headers,
@@ -148,7 +152,7 @@ impl PlatformAdapter for BrowserPlatformAdapter {
     }
 
     fn url_params_accessor(&self) -> &dyn UrlParamsAccessor {
-        &self.url_params
+        self.url_params.as_ref()
     }
 
     fn stamper(&self) -> &dyn StamperWithKeyManagement {

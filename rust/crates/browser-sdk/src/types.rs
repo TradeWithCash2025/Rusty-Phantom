@@ -1,11 +1,16 @@
 //! Core types for the browser SDK.
 
+use phantom_browser_injected_sdk::auto_confirm::{
+    AutoConfirmEnableParams, AutoConfirmResult, AutoConfirmSupportedChainsResult,
+};
+use phantom_chain_interfaces::{EthereumChain, SolanaChain};
 use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::{
     EmbeddedProviderAuthType, WalletAddress,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::debug::{DebugCallback, DebugLevel};
 
@@ -57,7 +62,7 @@ pub struct DebugConfig {
 }
 
 /// Browser SDK configuration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BrowserSdkConfig {
     /// Allowed authentication providers (required).
     pub providers: Vec<AuthProviderType>,
@@ -71,6 +76,32 @@ pub struct BrowserSdkConfig {
     pub auth_options: Option<AuthUrlOptions>,
     /// Address types to enable.
     pub address_types: Vec<AddressFormat>,
+    /// Optional platform adapter for embedded provider creation.
+    ///
+    /// When provided, the `ProviderManager` will automatically create an
+    /// embedded provider using this adapter. If not provided, the embedded
+    /// provider must be registered externally via `register_provider()`.
+    pub platform_adapter: Option<Arc<dyn phantom_embedded_provider_core::PlatformAdapter>>,
+    /// Optional debug logger for the embedded provider.
+    ///
+    /// When provided alongside `platform_adapter`, used for embedded
+    /// provider creation.
+    pub embedded_logger: Option<Arc<dyn phantom_embedded_provider_core::DebugLogger>>,
+}
+
+impl std::fmt::Debug for BrowserSdkConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BrowserSdkConfig")
+            .field("providers", &self.providers)
+            .field("app_id", &self.app_id)
+            .field("api_base_url", &self.api_base_url)
+            .field("embedded_wallet_type", &self.embedded_wallet_type)
+            .field("auth_options", &self.auth_options)
+            .field("address_types", &self.address_types)
+            .field("platform_adapter", &self.platform_adapter.as_ref().map(|_| "..."))
+            .field("embedded_logger", &self.embedded_logger.as_ref().map(|_| "..."))
+            .finish()
+    }
 }
 
 /// Authentication URL options.
@@ -138,4 +169,73 @@ pub trait Provider: Send + Sync {
 
     /// Get enabled address types.
     fn get_enabled_address_types(&self) -> Vec<AddressFormat>;
+
+    // ---------------------------------------------------------------
+    // Chain accessors
+    // ---------------------------------------------------------------
+
+    /// Access the Solana chain provider.
+    ///
+    /// Returns an error by default. Providers that support Solana should
+    /// override this method.
+    async fn solana(
+        &self,
+    ) -> Result<Arc<dyn SolanaChain>, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Solana chain access is not supported by this provider".into())
+    }
+
+    /// Access the Ethereum chain provider.
+    ///
+    /// Returns an error by default. Providers that support Ethereum should
+    /// override this method.
+    async fn ethereum(
+        &self,
+    ) -> Result<Arc<dyn EthereumChain>, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Ethereum chain access is not supported by this provider".into())
+    }
+
+    // ---------------------------------------------------------------
+    // Auto-confirm methods
+    // ---------------------------------------------------------------
+
+    /// Enable auto-confirm for transactions.
+    ///
+    /// Only supported by providers with auto-confirm capability (e.g.,
+    /// injected Phantom wallet). Returns an error by default.
+    async fn enable_auto_confirm(
+        &self,
+        _params: &AutoConfirmEnableParams,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Auto-confirm is not supported by this provider".into())
+    }
+
+    /// Disable auto-confirm for transactions.
+    ///
+    /// Only supported by providers with auto-confirm capability. Returns
+    /// an error by default.
+    async fn disable_auto_confirm(
+        &self,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Auto-confirm is not supported by this provider".into())
+    }
+
+    /// Get auto-confirm status.
+    ///
+    /// Only supported by providers with auto-confirm capability. Returns
+    /// an error by default.
+    async fn get_auto_confirm_status(
+        &self,
+    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Auto-confirm is not supported by this provider".into())
+    }
+
+    /// Get supported chains for auto-confirm.
+    ///
+    /// Only supported by providers with auto-confirm capability. Returns
+    /// an error by default.
+    async fn get_supported_auto_confirm_chains(
+        &self,
+    ) -> Result<AutoConfirmSupportedChainsResult, Box<dyn std::error::Error + Send + Sync>> {
+        Err("Auto-confirm is not supported by this provider".into())
+    }
 }

@@ -4,13 +4,17 @@
 //! event forwarding from underlying providers to the SDK, and
 //! provider preference persistence.
 
-use phantom_embedded_provider_core::WalletAddress;
+use phantom_constants::{DEFAULT_AUTH_URL, DEFAULT_WALLET_API_URL};
+use phantom_embedded_provider_core::{EmbeddedProviderConfig, WalletAddress};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::debug::{debug, DebugCategory};
-use crate::providers::{InjectedProvider, InjectedProviderConfig};
+use crate::providers::{
+    BrowserEmbeddedProvider, BrowserLogger,
+    InjectedProvider, InjectedProviderConfig,
+};
 use crate::types::{
     AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider,
 };
@@ -73,11 +77,16 @@ impl ProviderManager {
     }
 
     /// Initialize providers based on config (must be called after construction).
+    ///
+    /// Creates both injected and embedded providers as appropriate, then
+    /// sets the default provider. Matches the TypeScript `setDefaultProvider()`
+    /// which creates providers and prefers embedded over injected.
     pub async fn initialize(&self) {
         let has_injected = self
             .config
             .providers
             .contains(&AuthProviderType::Injected);
+        // TS: `config.providers.some(p => p !== "injected" && p !== "deeplink")`
         let has_embedded = self
             .config
             .providers
@@ -94,7 +103,7 @@ impl ProviderManager {
         if has_injected {
             debug().log(
                 DebugCategory::PROVIDER_MANAGER,
-                "Creating injected provider",
+                "Creating injected provider (allowed by providers array)",
                 None,
             );
             let injected = Arc::new(InjectedProvider::new(InjectedProviderConfig {
@@ -108,19 +117,133 @@ impl ProviderManager {
                 .insert("injected".to_string(), injected);
         }
 
-        // Set default provider key: prefer embedded if available, otherwise injected
-        let mut key_guard = self.current_provider_key.write().await;
+        // Create embedded provider if any embedded auth types are allowed
         if has_embedded {
-            *key_guard = Some(format!("embedded-{}", default_embedded_type));
-        } else if has_injected {
+            debug().log(
+                DebugCategory::PROVIDER_MANAGER,
+                "Creating embedded provider (allowed by providers array)",
+                None,
+            );
+            self.create_embedded_provider(&default_embedded_type).await;
+        }
+
+        // Set default provider: prefer embedded if available, otherwise injected.
+        // This matches the TS `setDefaultProvider()` logic.
+        let embedded_key = format!("embedded-{}", default_embedded_type);
+        let providers = self.providers.read().await;
+        let mut key_guard = self.current_provider_key.write().await;
+
+        if has_embedded && providers.contains_key(&embedded_key) {
+            *key_guard = Some(embedded_key);
+        } else if has_injected && providers.contains_key("injected") {
             *key_guard = Some("injected".to_string());
         }
+        drop(providers);
+        drop(key_guard);
 
         debug().info(
             DebugCategory::PROVIDER_MANAGER,
             "ProviderManager initialized",
             None,
         );
+    }
+
+    /// Create an embedded provider and register it in the providers map.
+    ///
+    /// Requires a `platform_adapter` and optionally an `embedded_logger` to
+    /// be set on the `BrowserSdkConfig`. If neither is provided, the embedded
+    /// provider cannot be created and a debug warning is logged.
+    async fn create_embedded_provider(&self, embedded_wallet_type: &str) {
+        let key = get_provider_key("embedded", Some(embedded_wallet_type));
+
+        // Don't recreate if already exists.
+        if self.providers.read().await.contains_key(&key) {
+            return;
+        }
+
+        let app_id = match &self.config.app_id {
+            Some(id) => id.clone(),
+            None => {
+                debug().error(
+                    DebugCategory::PROVIDER_MANAGER,
+                    "appId is required for embedded provider",
+                    None,
+                );
+                return;
+            }
+        };
+
+        let platform = match &self.config.platform_adapter {
+            Some(p) => p.clone(),
+            None => {
+                debug().log(
+                    DebugCategory::PROVIDER_MANAGER,
+                    "No platform adapter provided; embedded provider will not be created. \
+                     Register it externally via register_provider().",
+                    None,
+                );
+                return;
+            }
+        };
+
+        let logger: Arc<dyn phantom_embedded_provider_core::DebugLogger> =
+            match &self.config.embedded_logger {
+                Some(l) => l.clone(),
+                None => Arc::new(BrowserLogger::new(true)),
+            };
+
+        let api_base_url = self
+            .config
+            .api_base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_WALLET_API_URL.to_string());
+
+        let auth_url = self
+            .config
+            .auth_options
+            .as_ref()
+            .and_then(|o| o.auth_url.clone())
+            .unwrap_or_else(|| DEFAULT_AUTH_URL.to_string());
+
+        let redirect_url = self
+            .config
+            .auth_options
+            .as_ref()
+            .and_then(|o| o.redirect_url.clone())
+            .unwrap_or_default();
+
+        let embedded_config = EmbeddedProviderConfig {
+            api_base_url,
+            app_id,
+            auth_options: phantom_embedded_provider_core::AuthUrlOptions {
+                auth_url,
+                redirect_url,
+            },
+            embedded_wallet_type: embedded_wallet_type.to_string(),
+            address_types: self.config.address_types.clone(),
+        };
+
+        match BrowserEmbeddedProvider::new(embedded_config, platform, logger) {
+            Ok(provider) => {
+                let provider: Arc<dyn Provider> = Arc::new(provider);
+                self.providers.write().await.insert(key, provider);
+                debug().info(
+                    DebugCategory::PROVIDER_MANAGER,
+                    &format!(
+                        "Embedded provider created (walletType={})",
+                        embedded_wallet_type
+                    ),
+                    None,
+                );
+            }
+            Err(err) => {
+                debug().error(
+                    DebugCategory::PROVIDER_MANAGER,
+                    &format!("Failed to create embedded provider: {}", err),
+                    None,
+                );
+            }
+        }
     }
 
     /// Switch to a different provider type.
@@ -148,16 +271,23 @@ impl ProviderManager {
 
         let key = get_provider_key(provider_type, embedded_wallet_type.as_deref());
 
-        // Create injected provider on-demand if needed
-        if provider_type == "injected" && !self.providers.read().await.contains_key(&key) {
-            let injected = Arc::new(InjectedProvider::new(InjectedProviderConfig {
-                address_types: self.config.address_types.clone(),
-            }));
-            *self.injected_provider.write().await = Some(injected.clone());
-            self.providers
-                .write()
-                .await
-                .insert(key.clone(), injected);
+        // Create provider on-demand if needed
+        if !self.providers.read().await.contains_key(&key) {
+            if provider_type == "injected" {
+                let injected = Arc::new(InjectedProvider::new(InjectedProviderConfig {
+                    address_types: self.config.address_types.clone(),
+                }));
+                *self.injected_provider.write().await = Some(injected.clone());
+                self.providers
+                    .write()
+                    .await
+                    .insert(key.clone(), injected);
+            } else if provider_type == "embedded" {
+                let ewt = embedded_wallet_type
+                    .as_deref()
+                    .unwrap_or("user-wallet");
+                self.create_embedded_provider(ewt).await;
+            }
         }
 
         let providers = self.providers.read().await;
@@ -349,12 +479,13 @@ impl ProviderManager {
             .unwrap_or_else(|| "user-wallet".to_string());
         let embedded_key = format!("embedded-{}", embedded_wallet_type);
 
-        // Check if embedded providers are allowed
+        // Check if embedded providers are allowed.
+        // TS: `config.providers.some(p => p !== "injected")` — deeplink counts.
         let embedded_allowed = self
             .config
             .providers
             .iter()
-            .any(|p| !matches!(p, AuthProviderType::Injected | AuthProviderType::Deeplink));
+            .any(|p| !matches!(p, AuthProviderType::Injected));
 
         // Try embedded provider first if it exists and is allowed
         if embedded_allowed {

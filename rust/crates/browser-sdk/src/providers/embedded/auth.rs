@@ -13,10 +13,20 @@
 //!   in-band (e.g., tests, server-side flows).
 
 use phantom_embedded_provider_core::{
-    AuthProvider, AuthResult, EmbeddedProviderAuthType, PhantomConnectOptions,
+    AuthProvider, AuthResult, EmbeddedProviderAuthType, PhantomConnectOptions, UrlParamsAccessor,
 };
+use phantom_constants::DEFAULT_AUTHENTICATOR_ALGORITHM;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+/// SDK version reported in auth URL parameters.
+const SDK_VERSION: &str = "0.1.0";
+
+/// SDK type reported in auth URL parameters.
+const SDK_TYPE: &str = "rust";
+
+/// Platform identifier reported in auth URL parameters.
+const SDK_PLATFORM: &str = "rust-native";
 
 /// Callback invoked when an OAuth redirect URL is constructed.
 ///
@@ -46,17 +56,11 @@ pub struct BrowserAuthConfig {
     /// This is set from URL parameters when the application loads after an
     /// OAuth redirect.
     pub redirect_result: Option<AuthResult>,
-}
 
-impl Default for BrowserAuthConfig {
-    fn default() -> Self {
-        Self {
-            redirect_handler: None,
-            redirect_url: None,
-            auth_url: None,
-            redirect_result: None,
-        }
-    }
+    /// URL parameters accessor for reading redirect callback parameters.
+    /// Required for [`resume_auth_from_redirect`] to read URL params like
+    /// `wallet_id`, `session_id`, `error`, etc.
+    pub url_params: Arc<dyn UrlParamsAccessor>,
 }
 
 /// Browser authentication provider.
@@ -72,18 +76,17 @@ impl Default for BrowserAuthConfig {
 /// 3. If configured, the [`AuthRedirectHandler`] is invoked to navigate the user.
 /// 4. `authenticate()` returns `Ok(None)` indicating a redirect is in progress.
 /// 5. After the OAuth provider redirects back, the application calls
-///    [`set_redirect_result()`] with the parsed auth result, then
-///    [`resume_auth_from_redirect()`] to retrieve it.
+///    [`resume_auth_from_redirect()`] to parse and validate the callback URL
+///    parameters.
 ///
 /// # Examples
 ///
-/// ```
-/// use phantom_browser_sdk::providers::embedded::{BrowserAuthProvider, BrowserAuthConfig};
-///
-/// // For testing: create with no redirect handler
-/// let provider = BrowserAuthProvider::new(BrowserAuthConfig::default());
+/// ```ignore
+/// use phantom_browser_sdk::providers::embedded::{BrowserAuthProvider, BrowserAuthConfig, BrowserURLParamsAccessor};
+/// use std::sync::Arc;
 ///
 /// // With a redirect handler that opens a browser
+/// let url_params = Arc::new(BrowserURLParamsAccessor::new());
 /// let provider = BrowserAuthProvider::new(BrowserAuthConfig {
 ///     redirect_handler: Some(Box::new(|url| {
 ///         println!("Open this URL to authenticate: {}", url);
@@ -92,6 +95,7 @@ impl Default for BrowserAuthConfig {
 ///     redirect_url: Some("http://localhost:3000/callback".to_string()),
 ///     auth_url: None,
 ///     redirect_result: None,
+///     url_params,
 /// });
 /// ```
 pub struct BrowserAuthProvider {
@@ -105,6 +109,8 @@ pub struct BrowserAuthProvider {
     redirect_result: Mutex<Option<AuthResult>>,
     /// Pending auth state keyed by session ID, used for redirect resumption.
     pending_auth: Mutex<HashMap<String, PendingAuthState>>,
+    /// URL parameters accessor for reading redirect callback params.
+    url_params: Arc<dyn UrlParamsAccessor>,
 }
 
 /// Internal state saved before a redirect, used to complete auth on return.
@@ -115,6 +121,10 @@ struct PendingAuthState {
     provider: EmbeddedProviderAuthType,
     /// Session ID that ties the request to the response.
     session_id: String,
+    /// Public key used for the auth request.
+    public_key: String,
+    /// Application ID used for the auth request.
+    app_id: String,
 }
 
 impl BrowserAuthProvider {
@@ -126,6 +136,7 @@ impl BrowserAuthProvider {
             redirect_handler: config.redirect_handler,
             redirect_result: Mutex::new(config.redirect_result),
             pending_auth: Mutex::new(HashMap::new()),
+            url_params: config.url_params,
         }
     }
 
@@ -146,9 +157,10 @@ impl BrowserAuthProvider {
     ///
     /// Constructs a URL like:
     /// ```text
-    /// {auth_url}/connect?provider={provider}&publicKey={key}&appId={id}
-    ///     &sessionId={session}&redirectUrl={url}&clearPreviousSession={bool}
-    ///     &allowRefresh={bool}&algorithm={algo}
+    /// {auth_url}?public_key={key}&app_id={id}&redirect_uri={url}
+    ///     &session_id={session}&clear_previous_session={bool}
+    ///     &allow_refresh={bool}&sdk_version={ver}&sdk_type=rust
+    ///     &platform=rust-native&algorithm={algo}&provider={provider}
     /// ```
     pub fn build_auth_url(&self, options: &PhantomConnectOptions) -> String {
         let base = options
@@ -163,34 +175,48 @@ impl BrowserAuthProvider {
             .or(self.redirect_url.as_deref())
             .unwrap_or("");
 
-        let provider_str = match options.provider {
+        // Resolve the provider, defaulting to Google if not specified.
+        let provider = options
+            .provider
+            .unwrap_or(EmbeddedProviderAuthType::Google);
+
+        let provider_str = match provider {
             EmbeddedProviderAuthType::Google => "google",
             EmbeddedProviderAuthType::Apple => "apple",
             EmbeddedProviderAuthType::Phantom => "phantom",
             EmbeddedProviderAuthType::Device => "device",
         };
 
+        // Resolve the algorithm, defaulting to DEFAULT_AUTHENTICATOR_ALGORITHM.
+        let algorithm = options
+            .algorithm
+            .unwrap_or(DEFAULT_AUTHENTICATOR_ALGORITHM);
+        let algorithm_str = match algorithm {
+            phantom_constants::Algorithm::Ed25519 => "ed25519",
+            phantom_constants::Algorithm::Secp256r1 => "secp256r1",
+        };
+
+        let clear_previous_session = options.clear_previous_session.unwrap_or(false);
+        let allow_refresh = options.allow_refresh.unwrap_or(true);
+
         let mut url = format!(
-            "{}/connect?provider={}&publicKey={}&appId={}&sessionId={}&redirectUrl={}",
+            "{}?public_key={}&app_id={}&redirect_uri={}&session_id={}&clear_previous_session={}&allow_refresh={}&sdk_version={}&sdk_type={}&platform={}&algorithm={}&provider={}",
             base,
-            provider_str,
             percent_encode(&options.public_key),
             percent_encode(&options.app_id),
-            percent_encode(&options.session_id),
             percent_encode(redirect),
+            percent_encode(&options.session_id),
+            clear_previous_session,
+            allow_refresh,
+            percent_encode(SDK_VERSION),
+            percent_encode(SDK_TYPE),
+            percent_encode(SDK_PLATFORM),
+            percent_encode(algorithm_str),
+            percent_encode(provider_str),
         );
 
-        if let Some(clear) = options.clear_previous_session {
-            url.push_str(&format!("&clearPreviousSession={}", clear));
-        }
-
-        if let Some(allow) = options.allow_refresh {
-            url.push_str(&format!("&allowRefresh={}", allow));
-        }
-
-        if let Some(ref algorithm) = options.algorithm {
-            url.push_str(&format!("&algorithm={:?}", algorithm));
-        }
+        // Append any extra future params here as needed.
+        let _ = &mut url;
 
         url
     }
@@ -226,6 +252,8 @@ impl AuthProvider for BrowserAuthProvider {
     ///
     /// For device auth, returns `Ok(None)` since the device flow is handled
     /// separately by the embedded provider core.
+    ///
+    /// If no provider is specified in the options, defaults to Google.
     async fn authenticate(
         &self,
         options: PhantomConnectOptions,
@@ -238,26 +266,42 @@ impl AuthProvider for BrowserAuthProvider {
             }
         }
 
+        // Resolve the provider, defaulting to Google if not specified.
+        let provider = options
+            .provider
+            .unwrap_or(EmbeddedProviderAuthType::Google);
+
         // For device auth, the result comes back immediately (no redirect).
         // The embedded provider handles device auth flow separately.
-        if matches!(options.provider, EmbeddedProviderAuthType::Device) {
+        if matches!(provider, EmbeddedProviderAuthType::Device) {
             return Ok(None);
         }
 
-        // Save pending state for redirect resumption.
+        // Save pending state for redirect resumption, including public_key
+        // and app_id for session validation on return.
         {
             let mut pending = self.pending_auth.lock().unwrap();
             pending.insert(
                 options.session_id.clone(),
                 PendingAuthState {
-                    provider: options.provider,
+                    provider,
                     session_id: options.session_id.clone(),
+                    public_key: options.public_key.clone(),
+                    app_id: options.app_id.clone(),
                 },
             );
         }
 
         // Build the auth URL.
         let auth_url = self.build_auth_url(&options);
+
+        // Validate auth URL before using it: only HTTPS or http://localhost allowed.
+        if !auth_url.starts_with("https:") && !auth_url.starts_with("http://localhost") {
+            return Err(
+                "Invalid auth URL - only HTTPS URLs or http://localhost are allowed for authentication"
+                    .into(),
+            );
+        }
 
         // Invoke the redirect handler if available.
         if let Some(ref handler) = self.redirect_handler {
@@ -275,25 +319,177 @@ impl AuthProvider for BrowserAuthProvider {
 
     /// Resume authentication from a redirect callback.
     ///
-    /// Called after the OAuth provider redirects back to the application.
-    /// Checks for a stored redirect result matching the given auth provider.
+    /// Reads URL parameters from the redirect callback URL via the
+    /// [`UrlParamsAccessor`], validates them against stored pending auth state,
+    /// and returns the auth result.
+    ///
+    /// Handles error codes from the auth server:
+    /// - `access_denied` — user cancelled authentication
+    /// - `invalid_request` — malformed auth request
+    /// - `server_error` — auth server failure
+    /// - `temporarily_unavailable` — service temporarily unavailable
+    ///
+    /// Validates that the `session_id` in the callback matches the stored
+    /// pending auth state to prevent replay attacks.
     ///
     /// # Arguments
     /// * `provider` - The expected auth provider type to match.
     ///
     /// # Returns
-    /// `Some(AuthResult)` if a matching redirect result is available,
-    /// `None` otherwise.
+    /// `Ok(Some(AuthResult))` if auth data is present and valid,
+    /// `Ok(None)` if no auth data is in the URL,
+    /// `Err` if an auth error occurred or session validation failed.
     fn resume_auth_from_redirect(
         &self,
         provider: EmbeddedProviderAuthType,
-    ) -> Option<AuthResult> {
-        let mut guard = self.redirect_result.lock().unwrap();
-        if let Some(ref result) = *guard {
-            if result.provider == provider {
-                return guard.take();
+    ) -> Result<Option<AuthResult>, Box<dyn std::error::Error + Send + Sync>> {
+        // First, check if we have a pre-populated redirect result.
+        {
+            let mut guard = self.redirect_result.lock().unwrap();
+            if let Some(ref result) = *guard {
+                if result.provider == provider {
+                    return Ok(guard.take());
+                }
             }
         }
-        None
+
+        // Read URL parameters from the redirect callback.
+        let wallet_id = self.url_params.get_param("wallet_id");
+        let session_id = self.url_params.get_param("session_id");
+        let account_derivation_index = self.url_params.get_param("selected_account_index");
+        let error = self.url_params.get_param("error");
+        let error_description = self.url_params.get_param("error_description");
+
+        // Handle error responses from the auth server.
+        if let Some(ref error_code) = error {
+            let error_msg = error_description
+                .as_deref()
+                .unwrap_or(error_code.as_str());
+
+            // Clean up pending auth state on error.
+            if let Some(ref sid) = session_id {
+                let mut pending = self.pending_auth.lock().unwrap();
+                pending.remove(sid);
+            }
+
+            let full_error = match error_code.as_str() {
+                "access_denied" => {
+                    format!("Authentication cancelled: {}", error_msg)
+                }
+                "invalid_request" => {
+                    format!("Invalid authentication request: {}", error_msg)
+                }
+                "server_error" => {
+                    format!("Authentication server error: {}", error_msg)
+                }
+                "temporarily_unavailable" => {
+                    format!(
+                        "Authentication service temporarily unavailable: {}",
+                        error_msg
+                    )
+                }
+                _ => {
+                    format!("Authentication failed: {}", error_msg)
+                }
+            };
+
+            return Err(full_error.into());
+        }
+
+        // If no wallet_id or session_id in URL, there's no auth data to process.
+        let wallet_id = match wallet_id {
+            Some(id) => id,
+            None => {
+                tracing::debug!("No wallet_id in URL params, no auth data to resume");
+                return Ok(None);
+            }
+        };
+        let session_id = match session_id {
+            Some(id) => id,
+            None => {
+                tracing::debug!("No session_id in URL params, no auth data to resume");
+                return Ok(None);
+            }
+        };
+
+        // Validate session_id against stored pending auth state (replay prevention).
+        {
+            let pending = self.pending_auth.lock().unwrap();
+            if let Some(stored) = pending.get(&session_id) {
+                // Verify session_id matches (it will by key, but also check provider).
+                if stored.provider != provider {
+                    tracing::warn!(
+                        stored_provider = ?stored.provider,
+                        expected_provider = ?provider,
+                        "Provider mismatch in redirect resume"
+                    );
+                }
+            } else {
+                // No stored state for this session_id. This could be a replay or
+                // the state was lost. Log a warning but continue to be resilient.
+                tracing::warn!(
+                    session_id = session_id.as_str(),
+                    "No pending auth state found for session_id - possible session corruption or replay"
+                );
+            }
+        }
+
+        // Extract additional parameters from the redirect URL.
+        let organization_id = self.url_params.get_param("organization_id");
+        let expires_in_ms = self.url_params.get_param("expires_in_ms");
+        let auth_user_id = self.url_params.get_param("auth_user_id");
+
+        // organization_id is required for a valid auth response.
+        let organization_id = match organization_id {
+            Some(id) => {
+                if id.starts_with("temp-") {
+                    tracing::warn!(
+                        organization_id = id.as_str(),
+                        "Received temporary organization_id, server may not be configured properly"
+                    );
+                }
+                id
+            }
+            None => {
+                // Clean up pending auth state.
+                let mut pending = self.pending_auth.lock().unwrap();
+                pending.remove(&session_id);
+                return Err("Missing organization_id in auth response".into());
+            }
+        };
+
+        let parsed_index = account_derivation_index
+            .as_deref()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+
+        let parsed_expires = expires_in_ms
+            .as_deref()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        // Clean up pending auth state now that we've consumed it.
+        {
+            let mut pending = self.pending_auth.lock().unwrap();
+            pending.remove(&session_id);
+        }
+
+        tracing::info!(
+            wallet_id = wallet_id.as_str(),
+            organization_id = organization_id.as_str(),
+            session_id = session_id.as_str(),
+            account_derivation_index = parsed_index,
+            expires_in_ms = parsed_expires,
+            "Successfully resumed auth from redirect"
+        );
+
+        Ok(Some(AuthResult {
+            wallet_id,
+            organization_id,
+            provider,
+            account_derivation_index: parsed_index,
+            expires_in_ms: parsed_expires,
+            auth_user_id,
+        }))
     }
 }

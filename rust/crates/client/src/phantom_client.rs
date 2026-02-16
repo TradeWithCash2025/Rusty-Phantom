@@ -76,6 +76,14 @@ impl PhantomClient {
         Ok(())
     }
 
+    /// Get the stamper's cryptographic algorithm, if a stamper is present.
+    ///
+    /// Returns `None` when no stamper is configured.
+    /// Mirrors the TS `this.stamper?.algorithm`.
+    pub fn stamper_algorithm(&self) -> Option<phantom_constants::Algorithm> {
+        self.stamper.as_ref().map(|s| s.algorithm())
+    }
+
     /// Get the authenticator public key from the stamper, if available.
     ///
     /// Checks if the stamper supports key management by calling `get_key_info()`.
@@ -796,7 +804,7 @@ impl PhantomClient {
                     request = request.header("X-Phantom-Stamp", stamp);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to stamp prepare request: {}", e);
+                    return Err(ClientError::Api(format!("Failed to stamp prepare request: {}", e)));
                 }
             }
         }
@@ -876,7 +884,7 @@ impl PhantomClient {
                     request = request.header("X-Phantom-Stamp", stamp);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to stamp request: {}", e);
+                    return Err(ClientError::Api(format!("Failed to stamp request: {}", e)));
                 }
             }
         }

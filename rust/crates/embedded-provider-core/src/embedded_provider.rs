@@ -3,7 +3,7 @@
 //! Mirrors the TypeScript `EmbeddedProvider` class from
 //! `packages/embedded-provider-core/src/embedded-provider.ts`.
 
-use phantom_base64url::{base64url_encode, string_to_base64url};
+use phantom_base64url::string_to_base64url;
 use phantom_client::{AddressFormat, PhantomClient, PhantomClientConfig};
 use phantom_sdk_types::StamperWithKeyManagement;
 use phantom_parsers::{
@@ -203,6 +203,61 @@ impl EmbeddedProvider {
         &self,
         auth_options: AuthOptions,
     ) -> Result<ConnectResult, Box<dyn std::error::Error + Send + Sync>> {
+        let result = self.connect_inner(&auth_options).await;
+
+        match result {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                // Log the full error details for debugging
+                self.logger.error(
+                    "EMBEDDED_PROVIDER",
+                    "Connect failed with error",
+                    Some(&serde_json::json!({ "error": e.to_string() })),
+                );
+
+                // Emit connect_error event for manual connect failure
+                self.emit(
+                    EmbeddedProviderEvent::ConnectError,
+                    serde_json::json!({
+                        "error": e.to_string(),
+                        "source": "manual-connect",
+                    }),
+                )
+                .await;
+
+                // Enhanced error handling with specific error types
+                let msg = e.to_string();
+
+                if msg.contains("IndexedDB") || msg.contains("storage") {
+                    return Err("Storage error: Unable to access browser storage. Please ensure storage is available and try again.".into());
+                }
+
+                if msg.contains("network") || msg.contains("fetch") {
+                    return Err("Network error: Unable to connect to authentication server. Please check your internet connection and try again.".into());
+                }
+
+                if msg.contains("JWT") || msg.contains("jwt") {
+                    return Err(format!("JWT Authentication error: {}", msg).into());
+                }
+
+                if msg.contains("Authentication") || msg.contains("auth") {
+                    return Err(format!("Authentication error: {}", msg).into());
+                }
+
+                if msg.contains("organization") || msg.contains("wallet") {
+                    return Err(format!("Wallet creation error: {}", msg).into());
+                }
+
+                Err(e)
+            }
+        }
+    }
+
+    /// Inner connect logic, separated to allow error categorization in the outer method.
+    async fn connect_inner(
+        &self,
+        auth_options: &AuthOptions,
+    ) -> Result<ConnectResult, Box<dyn std::error::Error + Send + Sync>> {
         self.logger.info(
             "EMBEDDED_PROVIDER",
             "Starting embedded provider connect",
@@ -231,7 +286,7 @@ impl EmbeddedProvider {
         }
 
         // Validate auth options
-        self.validate_auth_options(&auth_options)?;
+        self.validate_auth_options(auth_options)?;
 
         // No existing connection, create new one
         self.logger.info(
@@ -257,7 +312,7 @@ impl EmbeddedProvider {
             .handle_auth_flow(
                 &stamper_info.public_key,
                 &stamper_info_data,
-                &auth_options,
+                auth_options,
                 AUTHENTICATOR_EXPIRATION_TIME_MS,
             )
             .await?;
@@ -381,23 +436,64 @@ impl EmbeddedProvider {
         // Check if authenticator needs renewal before performing the operation
         self.ensure_valid_authenticator().await?;
 
+        self.logger.info(
+            "EMBEDDED_PROVIDER",
+            "Signing and sending transaction",
+            Some(&serde_json::json!({
+                "walletId": wallet_id,
+                "networkId": params.network_id,
+            })),
+        );
+
+        // Parse transaction to KMS format (base64url for Solana, hex for EVM) based on network
+        let parsed_transaction = phantom_parsers::parse_to_kms_transaction(
+            phantom_parsers::TransactionInput::Bytes(params.transaction.clone()),
+            &params.network_id,
+        )
+        .map_err(|e| format!("Failed to parse transaction: {}", e))?;
+
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
             .as_ref()
             .and_then(|s| s.account_derivation_index)
             .unwrap_or(0);
 
-        let encoded = base64url_encode(&params.transaction);
+        let transaction_payload = parsed_transaction
+            .parsed
+            .ok_or("Failed to parse transaction: no valid encoding found")?;
 
-        let raw_response = client
+        let account = self.get_address_for_network(&params.network_id).await;
+        if account.is_none() {
+            return Err(format!("No address found for network {}", params.network_id).into());
+        }
+
+        // Sign and send with spending limit error handling
+        let raw_response = match client
             .sign_and_send_transaction(&phantom_client::SignAndSendTransactionParams {
                 wallet_id: wallet_id.clone(),
-                transaction: encoded,
+                transaction: transaction_payload,
                 network_id: params.network_id.clone(),
                 derivation_index: Some(derivation_index),
-                account: None,
+                account,
             })
-            .await?;
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Normalize spending limit errors into a dedicated event while preserving the rejection
+                if let phantom_client::ClientError::WalletService(
+                    phantom_client::WalletServiceError::SpendingLimitExceeded { .. },
+                ) = &e
+                {
+                    self.emit(
+                        EmbeddedProviderEvent::SpendingLimitReached,
+                        serde_json::json!({ "error": e.to_string() }),
+                    )
+                    .await;
+                }
+                return Err(e.into());
+            }
+        };
 
         let network_id: phantom_constants::NetworkId =
             serde_json::from_value(serde_json::Value::String(params.network_id.clone()))
@@ -424,21 +520,44 @@ impl EmbeddedProvider {
         // Check if authenticator needs renewal before performing the operation
         self.ensure_valid_authenticator().await?;
 
+        self.logger.info(
+            "EMBEDDED_PROVIDER",
+            "Signing transaction",
+            Some(&serde_json::json!({
+                "walletId": wallet_id,
+                "networkId": params.network_id,
+            })),
+        );
+
+        // Parse transaction to KMS format (base64url for Solana, hex for EVM) based on network
+        let parsed_transaction = phantom_parsers::parse_to_kms_transaction(
+            phantom_parsers::TransactionInput::Bytes(params.transaction.clone()),
+            &params.network_id,
+        )
+        .map_err(|e| format!("Failed to parse transaction: {}", e))?;
+
         let session = self.platform.storage().get_session().await?;
         let derivation_index = session
             .as_ref()
             .and_then(|s| s.account_derivation_index)
             .unwrap_or(0);
 
-        let encoded = base64url_encode(&params.transaction);
+        let transaction_payload = parsed_transaction
+            .parsed
+            .ok_or("Failed to parse transaction: no valid encoding found")?;
+
+        let account = self.get_address_for_network(&params.network_id).await;
+        if account.is_none() {
+            return Err(format!("No address found for network {}", params.network_id).into());
+        }
 
         let raw_response = client
             .sign_transaction(&phantom_client::SignTransactionParams {
                 wallet_id: wallet_id.clone(),
-                transaction: encoded,
+                transaction: transaction_payload,
                 network_id: params.network_id.clone(),
                 derivation_index: Some(derivation_index),
-                account: None,
+                account,
             })
             .await?;
 
@@ -658,17 +777,41 @@ impl EmbeddedProvider {
             return Some(session);
         }
 
-        // Non-completed sessions are not usable
-        self.logger.log(
-            "EMBEDDED_PROVIDER",
-            "Session not completed, clearing",
-            Some(&serde_json::json!({
-                "sessionId": session.session_id,
-                "status": format!("{:?}", session.status),
-            })),
-        );
-        let _ = self.platform.storage().clear_session().await;
-        None
+        // For non-completed sessions, check URL params for session_id context
+        let url_session_id = self.platform.url_params_accessor().get_param("session_id");
+
+        // If we have a pending session but no sessionId in URL, this is a mismatch
+        if session.status == SessionStatus::Pending && url_session_id.is_none() {
+            self.logger.warn(
+                "EMBEDDED_PROVIDER",
+                "Session mismatch detected - pending session without redirect context",
+                Some(&serde_json::json!({
+                    "sessionId": session.session_id,
+                    "status": format!("{:?}", session.status),
+                })),
+            );
+            let _ = self.platform.storage().clear_session().await;
+            return None;
+        }
+
+        // If sessionId in URL doesn't match stored session, clear invalid session
+        if let Some(ref url_sid) = url_session_id {
+            if url_sid != &session.session_id {
+                self.logger.warn(
+                    "EMBEDDED_PROVIDER",
+                    "Session ID mismatch detected",
+                    Some(&serde_json::json!({
+                        "storedSessionId": session.session_id,
+                        "urlSessionId": url_sid,
+                    })),
+                );
+                let _ = self.platform.storage().clear_session().await;
+                return None;
+            }
+        }
+
+        // Non-completed sessions that pass URL checks are returned as-is for redirect resume
+        Some(session)
     }
 
     /// Get the appropriate address for a given network ID from available addresses.
@@ -715,37 +858,183 @@ impl EmbeddedProvider {
 
     async fn try_existing_connection(
         &self,
-        _is_auto_connect: bool,
+        is_auto_connect: bool,
     ) -> Result<Option<ConnectResult>, Box<dyn std::error::Error + Send + Sync>> {
+        self.logger.log("EMBEDDED_PROVIDER", "Getting existing session", None);
+
+        let storage = self.platform.storage();
+        let session = match self.validate_and_clean_session().await {
+            Some(s) => s,
+            None => {
+                self.logger.log("EMBEDDED_PROVIDER", "No existing session found", None);
+                return Ok(None);
+            }
+        };
+
+        // First priority: If we have a completed session, use it
+        if session.status == SessionStatus::Completed {
+            self.logger.info(
+                "EMBEDDED_PROVIDER",
+                "Using existing completed session",
+                Some(&serde_json::json!({
+                    "sessionId": session.session_id,
+                    "walletId": session.wallet_id,
+                })),
+            );
+
+            self.initialize_client_from_session(&session).await?;
+
+            // Update session last_used timestamp and save
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let mut updated_session = session.clone();
+            updated_session.last_used = now;
+            storage.save_session(&updated_session).await?;
+
+            self.logger.info(
+                "EMBEDDED_PROVIDER",
+                "Connection from existing session successful",
+                Some(&serde_json::json!({
+                    "walletId": updated_session.wallet_id,
+                })),
+            );
+
+            // Ensure authenticator is valid after successful connection
+            self.ensure_valid_authenticator().await?;
+
+            let wallet_id = self.wallet_id.read().await;
+            let addresses = self.addresses.read().await;
+
+            let result = ConnectResult {
+                wallet_id: wallet_id.clone(),
+                addresses: addresses.clone(),
+                status: Some(ConnectStatus::Completed),
+                auth_user_id: updated_session.auth_user_id.clone(),
+                auth_provider: updated_session.auth_provider,
+            };
+
+            self.emit(
+                EmbeddedProviderEvent::Connect,
+                serde_json::json!({
+                    "source": "existing-session",
+                    "authUserId": result.auth_user_id,
+                    "authProvider": format!("{:?}", result.auth_provider),
+                }),
+            )
+            .await;
+
+            return Ok(Some(result));
+        }
+
+        // Second priority: Check if we're resuming from a redirect
+        self.logger.log(
+            "EMBEDDED_PROVIDER",
+            "No completed session found, checking for redirect resume",
+            None,
+        );
+
+        let auth_provider = self.platform.auth_provider();
+        let resume_result = auth_provider.resume_auth_from_redirect(session.auth_provider)?;
+        if let Some(auth_result) = resume_result {
+            self.logger.info(
+                "EMBEDDED_PROVIDER",
+                "Resuming from redirect",
+                Some(&serde_json::json!({
+                    "walletId": auth_result.wallet_id,
+                    "provider": format!("{:?}", auth_result.provider),
+                })),
+            );
+
+            match self.complete_auth_connection(auth_result).await {
+                Ok(result) => return Ok(Some(result)),
+                Err(e) => {
+                    let err_msg = e.to_string();
+                    // Handle the edge case where session was wiped but URL has session params
+                    if err_msg.contains("No session found after redirect") && !is_auto_connect {
+                        self.logger.warn(
+                            "EMBEDDED_PROVIDER",
+                            "Session missing during redirect resume - will start fresh auth flow",
+                            Some(&serde_json::json!({ "error": err_msg })),
+                        );
+                        storage.clear_session().await?;
+                        return Ok(None);
+                    }
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Complete authentication after redirect resume.
+    async fn complete_auth_connection(
+        &self,
+        auth_result: AuthResult,
+    ) -> Result<ConnectResult, Box<dyn std::error::Error + Send + Sync>> {
         let storage = self.platform.storage();
         let session = storage.get_session().await?;
 
-        let session = match session {
+        let mut session = match session {
             Some(s) => s,
-            None => return Ok(None),
+            None => return Err("No session found after redirect - session may have expired".into()),
         };
 
-        if session.status != SessionStatus::Completed {
-            return Ok(None);
+        // Update session with actual wallet ID and auth info from redirect
+        session.wallet_id = auth_result.wallet_id;
+        session.auth_provider = auth_result.provider;
+        session.organization_id = auth_result.organization_id;
+        session.account_derivation_index = Some(auth_result.account_derivation_index);
+        session.auth_user_id = auth_result.auth_user_id;
+        session.status = SessionStatus::Completed;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        session.last_used = now;
+
+        // Update authenticator expiration if provided by auth response
+        if auth_result.expires_in_ms > 0 {
+            session.authenticator_created_at = now;
+            session.authenticator_expires_at = now + auth_result.expires_in_ms;
+            self.logger.log(
+                "EMBEDDED_PROVIDER",
+                "Updated authenticator expiration from auth response",
+                Some(&serde_json::json!({
+                    "expiresInMs": auth_result.expires_in_ms,
+                    "expiresAt": session.authenticator_expires_at,
+                })),
+            );
         }
 
-        if !self.is_session_valid(&session) {
-            storage.clear_session().await?;
-            return Ok(None);
-        }
+        storage.save_session(&session).await?;
+
+        // Clear the logout flag after successful authentication
+        storage.set_should_clear_previous_session(false).await?;
+        self.logger.log(
+            "EMBEDDED_PROVIDER",
+            "Cleared logout flag after successful authentication",
+            None,
+        );
 
         self.initialize_client_from_session(&session).await?;
+
+        // Ensure authenticator is valid after successful connection
+        self.ensure_valid_authenticator().await?;
 
         let wallet_id = self.wallet_id.read().await;
         let addresses = self.addresses.read().await;
 
-        Ok(Some(ConnectResult {
+        Ok(ConnectResult {
             wallet_id: wallet_id.clone(),
             addresses: addresses.clone(),
             status: Some(ConnectStatus::Completed),
             auth_user_id: session.auth_user_id.clone(),
             auth_provider: session.auth_provider,
-        }))
+        })
     }
 
     fn validate_auth_options(
@@ -765,7 +1054,17 @@ impl EmbeddedProvider {
     fn is_session_valid(&self, session: &Session) -> bool {
         if session.wallet_id.is_empty()
             || session.organization_id.is_empty()
+            || session.stamper_info.public_key.is_empty()
         {
+            self.logger.log(
+                "EMBEDDED_PROVIDER",
+                "Session missing required fields",
+                Some(&serde_json::json!({
+                    "hasWalletId": !session.wallet_id.is_empty(),
+                    "hasOrganizationId": !session.organization_id.is_empty(),
+                    "hasStamperInfo": !session.stamper_info.public_key.is_empty(),
+                })),
+            );
             return false;
         }
 
@@ -907,7 +1206,7 @@ impl EmbeddedProvider {
             .authenticate(PhantomConnectOptions {
                 public_key: public_key.to_string(),
                 app_id: self.config.app_id.clone(),
-                provider: auth_options.provider,
+                provider: Some(auth_options.provider),
                 redirect_url: Some(self.config.auth_options.redirect_url.clone()),
                 auth_url: Some(self.config.auth_options.auth_url.clone()),
                 session_id,
@@ -991,39 +1290,70 @@ impl EmbeddedProvider {
         *self.client.write().await = Some(new_client);
         *self.wallet_id.write().await = Some(session.wallet_id.clone());
 
-        // Fetch wallet addresses
-        let client = self.client.read().await;
-        if let Some(ref c) = *client {
-            let derivation_index = session.account_derivation_index.unwrap_or(0);
-            let raw_addresses = c
-                .get_wallet_addresses(&session.wallet_id, None, Some(derivation_index))
-                .await?;
+        // Fetch wallet addresses with retry and auto-disconnect on failure
+        let derivation_index = session.account_derivation_index.unwrap_or(0);
+        let wallet_id = session.wallet_id.clone();
+        let address_types = self.config.address_types.clone();
 
-            let filtered: Vec<WalletAddress> = raw_addresses
-                .into_iter()
-                .filter(|addr| {
-                    self.config.address_types.iter().any(|t| {
-                        // Compare the address format string representation with the
-                        // raw address_type returned by the API.
-                        match serde_json::to_value(t) {
-                            Ok(v) => v.as_str().map_or(false, |s| s == addr.address_type),
-                            Err(_) => false,
+        let get_addresses_result = {
+            let client_guard = self.client.read().await;
+            let c = client_guard.as_ref().ok_or("Client not initialized")?;
+
+            crate::utils::retry_with_backoff(
+                || c.get_wallet_addresses(&wallet_id, None, Some(derivation_index)),
+                "getWalletAddresses",
+                self.logger.as_ref(),
+                3,
+                1000,
+            )
+            .await
+        };
+
+        match get_addresses_result {
+            Ok(raw_addresses) => {
+                let filtered: Vec<WalletAddress> = raw_addresses
+                    .into_iter()
+                    .filter(|addr| {
+                        address_types.iter().any(|t| {
+                            match serde_json::to_value(t) {
+                                Ok(v) => v.as_str().map_or(false, |s| s == addr.address_type),
+                                Err(_) => false,
+                            }
+                        })
+                    })
+                    .map(|addr| {
+                        let parsed_type = serde_json::from_value(
+                            serde_json::Value::String(addr.address_type.clone()),
+                        )
+                        .unwrap_or(crate::constants::AddressFormat::Ethereum);
+                        WalletAddress {
+                            address_type: parsed_type,
+                            address: addr.address,
                         }
                     })
-                })
-                .map(|addr| {
-                    let parsed_type = serde_json::from_value(
-                        serde_json::Value::String(addr.address_type.clone()),
-                    )
-                    .unwrap_or(crate::constants::AddressFormat::Ethereum);
-                    WalletAddress {
-                        address_type: parsed_type,
-                        address: addr.address,
-                    }
-                })
-                .collect();
+                    .collect();
 
-            *self.addresses.write().await = filtered;
+                *self.addresses.write().await = filtered;
+            }
+            Err(e) => {
+                self.logger.error(
+                    "EMBEDDED_PROVIDER",
+                    "getWalletAddresses failed after retries, disconnecting",
+                    Some(&serde_json::json!({
+                        "walletId": wallet_id,
+                        "error": e.to_string(),
+                        "derivationIndex": derivation_index,
+                    })),
+                );
+
+                // Clear the session if getWalletAddresses fails after retries
+                let _ = self.platform.storage().clear_session().await;
+                *self.client.write().await = None;
+                *self.wallet_id.write().await = None;
+                *self.addresses.write().await = Vec::new();
+
+                return Err(e.into());
+            }
         }
 
         Ok(())

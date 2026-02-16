@@ -19,9 +19,11 @@ mod platform;
 mod storage;
 mod url_params;
 
+use phantom_chain_interfaces::{EthereumChain, SolanaChain};
 use phantom_client::constants::AddressFormat;
 use phantom_embedded_provider_core::{
-    EmbeddedProvider as CoreEmbeddedProvider, EmbeddedProviderConfig, PlatformAdapter, WalletAddress,
+    EmbeddedEthereumChain, EmbeddedProvider as CoreEmbeddedProvider, EmbeddedProviderConfig,
+    EmbeddedSolanaChain, PlatformAdapter, WalletAddress,
 };
 use std::sync::Arc;
 
@@ -38,10 +40,14 @@ pub use url_params::BrowserURLParamsAccessor;
 /// Browser-specific embedded provider.
 ///
 /// Extends the core `EmbeddedProvider` with a browser platform adapter
-/// and address type tracking.
+/// and address type tracking. The core provider is held in an `Arc` so
+/// that chain wrappers (`EmbeddedSolanaChain`, `EmbeddedEthereumChain`)
+/// can share it.
 pub struct BrowserEmbeddedProvider {
-    core: CoreEmbeddedProvider,
+    core: Arc<CoreEmbeddedProvider>,
     address_types: Vec<AddressFormat>,
+    solana_chain: Option<Arc<EmbeddedSolanaChain>>,
+    ethereum_chain: Option<Arc<EmbeddedEthereumChain>>,
 }
 
 impl BrowserEmbeddedProvider {
@@ -52,10 +58,25 @@ impl BrowserEmbeddedProvider {
         logger: Arc<dyn phantom_embedded_provider_core::DebugLogger>,
     ) -> Result<Self, String> {
         let address_types = config.address_types.clone();
-        let core = CoreEmbeddedProvider::new(config, platform, logger)?;
+        let core = Arc::new(CoreEmbeddedProvider::new(config, platform, logger)?);
+
+        // Create chain wrappers based on configured address types.
+        let solana_chain = if address_types.contains(&AddressFormat::Solana) {
+            Some(Arc::new(EmbeddedSolanaChain::new(core.clone())))
+        } else {
+            None
+        };
+        let ethereum_chain = if address_types.contains(&AddressFormat::Ethereum) {
+            Some(Arc::new(EmbeddedEthereumChain::new(core.clone())))
+        } else {
+            None
+        };
+
         Ok(Self {
             core,
             address_types,
+            solana_chain,
+            ethereum_chain,
         })
     }
 }
@@ -125,5 +146,23 @@ impl Provider for BrowserEmbeddedProvider {
 
     fn get_enabled_address_types(&self) -> Vec<AddressFormat> {
         self.address_types.clone()
+    }
+
+    async fn solana(
+        &self,
+    ) -> Result<Arc<dyn SolanaChain>, Box<dyn std::error::Error + Send + Sync>> {
+        match &self.solana_chain {
+            Some(chain) => Ok(chain.clone() as Arc<dyn SolanaChain>),
+            None => Err("Solana not enabled for this embedded provider".into()),
+        }
+    }
+
+    async fn ethereum(
+        &self,
+    ) -> Result<Arc<dyn EthereumChain>, Box<dyn std::error::Error + Send + Sync>> {
+        match &self.ethereum_chain {
+            Some(chain) => Ok(chain.clone() as Arc<dyn EthereumChain>),
+            None => Err("Ethereum not enabled for this embedded provider".into()),
+        }
     }
 }

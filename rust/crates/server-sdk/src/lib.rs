@@ -13,6 +13,7 @@ use phantom_client::{
 use phantom_constants::{
     analytics::headers as analytics_headers, DEFAULT_WALLET_API_URL,
 };
+use phantom_constants::{Algorithm, DEFAULT_AUTHENTICATOR_ALGORITHM};
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
     ParsedTransactionResult,
@@ -118,6 +119,23 @@ fn create_server_sdk_headers(app_id: &str) -> HashMap<String, String> {
 }
 
 // ============================================================================
+// Transaction input classification
+// ============================================================================
+
+/// Classify a transaction string into the appropriate `TransactionInput` variant
+/// based on the network type.
+///
+/// - For EVM networks: treats the string as a hex string
+/// - For all other networks (Solana, Sui, Bitcoin): treats the string as base64
+fn classify_transaction_input(transaction: &str, network_id: &str) -> TransactionInput {
+    if is_ethereum_chain(network_id) {
+        TransactionInput::HexString(transaction.to_string())
+    } else {
+        TransactionInput::Base64String(transaction.to_string())
+    }
+}
+
+// ============================================================================
 // ServerSDK
 // ============================================================================
 
@@ -196,16 +214,27 @@ impl ServerSdk {
         Ok(parse_sign_message_response(&raw_response, network_id))
     }
 
-    /// Sign a transaction — transaction should already be encoded (base64url for Solana, hex for EVM).
+    /// Sign a transaction — supports various transaction formats and automatically parses them.
+    ///
+    /// Uses `parse_to_kms_transaction` to convert flexible transaction input
+    /// (base64url for Solana, hex for EVM) to the KMS-expected format.
     pub async fn sign_transaction(
         &self,
         params: ServerSignTransactionParams,
     ) -> Result<ParsedTransactionResult, phantom_client::ClientError> {
+        // Parse the transaction to KMS format based on network type
+        let transaction_input = classify_transaction_input(&params.transaction, &params.network_id);
+        let parsed = parse_to_kms_transaction(transaction_input, &params.network_id)
+            .map_err(|e| phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e)))?;
+        let transaction_payload = parsed
+            .parsed
+            .ok_or_else(|| phantom_client::ClientError::Config("Failed to parse transaction: no valid encoding found".to_string()))?;
+
         let raw_response = self
             .client
             .sign_transaction(&phantom_client::SignTransactionParams {
                 wallet_id: params.wallet_id,
-                transaction: params.transaction,
+                transaction: transaction_payload,
                 network_id: params.network_id.clone(),
                 derivation_index: params.derivation_index,
                 account: params.account,
@@ -223,16 +252,27 @@ impl ServerSdk {
         ))
     }
 
-    /// Sign and send a transaction.
+    /// Sign and send a transaction — supports various transaction formats and automatically parses them.
+    ///
+    /// Uses `parse_to_kms_transaction` to convert flexible transaction input
+    /// (base64url for Solana, hex for EVM) to the KMS-expected format.
     pub async fn sign_and_send_transaction(
         &self,
         params: ServerSignAndSendTransactionParams,
     ) -> Result<ParsedTransactionResult, phantom_client::ClientError> {
+        // Parse the transaction to KMS format based on network type
+        let transaction_input = classify_transaction_input(&params.transaction, &params.network_id);
+        let parsed = parse_to_kms_transaction(transaction_input, &params.network_id)
+            .map_err(|e| phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e)))?;
+        let transaction_payload = parsed
+            .parsed
+            .ok_or_else(|| phantom_client::ClientError::Config("Failed to parse transaction: no valid encoding found".to_string()))?;
+
         let raw_response = self
             .client
             .sign_and_send_transaction(&phantom_client::SignAndSendTransactionParams {
                 wallet_id: params.wallet_id,
-                transaction: params.transaction,
+                transaction: transaction_payload,
                 network_id: params.network_id.clone(),
                 derivation_index: params.derivation_index,
                 account: params.account,
@@ -282,6 +322,17 @@ impl ServerSdk {
         let base64url_public_key =
             base64url_encode(&bs58::decode(&key_pair.public_key).into_vec().unwrap_or_default());
 
+        // Read the algorithm from the stamper if available, otherwise use default
+        let algorithm = match self
+            .client
+            .stamper_algorithm()
+            .unwrap_or(DEFAULT_AUTHENTICATOR_ALGORITHM)
+        {
+            Algorithm::Ed25519 => phantom_client::ClientAlgorithm::Ed25519,
+            // Secp256r1 maps to Secp256k1 as the closest supported client algorithm
+            Algorithm::Secp256r1 => phantom_client::ClientAlgorithm::Secp256k1,
+        };
+
         temp_client
             .create_organization(
                 name,
@@ -291,7 +342,7 @@ impl ServerSdk {
                     authenticators: vec![phantom_client::AuthenticatorConfig::Keypair {
                         authenticator_name: format!("auth-{}", get_secure_timestamp_sync()),
                         public_key: base64url_public_key,
-                        algorithm: phantom_client::ClientAlgorithm::Ed25519,
+                        algorithm,
                         expires_in_ms: None,
                     }],
                 }],
@@ -342,3 +393,7 @@ pub use phantom_client::{
 pub use phantom_api_key_stamper::{self as api_key_stamper, ApiKeyStamper as ApiKeyStamperExport};
 pub use phantom_constants::NetworkId;
 pub use phantom_crypto::generate_key_pair;
+// Re-export transaction parsing utilities (matches TS re-export of parseToKmsTransaction)
+pub use phantom_parsers::{
+    parse_to_kms_transaction, ParsedTransaction, TransactionInput,
+};

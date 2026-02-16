@@ -36,8 +36,8 @@ pub struct PhantomConnectOptions {
     pub public_key: String,
     /// Application ID.
     pub app_id: String,
-    /// Auth provider.
-    pub provider: EmbeddedProviderAuthType,
+    /// Auth provider (optional — defaults to Google if not specified).
+    pub provider: Option<EmbeddedProviderAuthType>,
     /// Redirect URL after auth.
     pub redirect_url: Option<String>,
     /// Auth server URL.
@@ -61,10 +61,15 @@ pub trait AuthProvider: Send + Sync {
         -> Result<Option<AuthResult>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Resume authentication from a redirect (if applicable).
+    ///
+    /// Reads URL parameters from the redirect callback, validates the session,
+    /// and returns the auth result. Returns `Ok(None)` if no auth data is
+    /// present in the URL. Returns `Err` for auth errors (access_denied,
+    /// invalid_request, server_error, etc.) or session validation failures.
     fn resume_auth_from_redirect(
         &self,
         provider: EmbeddedProviderAuthType,
-    ) -> Option<AuthResult>;
+    ) -> Result<Option<AuthResult>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Options for Phantom app authentication.

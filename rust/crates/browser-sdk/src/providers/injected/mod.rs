@@ -1112,4 +1112,18 @@ impl Provider for InjectedProvider {
         }
         self.address_types.clone()
     }
+
+    async fn solana(
+        &self,
+    ) -> Result<Arc<dyn SolanaChain>, Box<dyn std::error::Error + Send + Sync>> {
+        // Delegate to the inherent method.
+        InjectedProvider::solana(self).await
+    }
+
+    async fn ethereum(
+        &self,
+    ) -> Result<Arc<dyn EthereumChain>, Box<dyn std::error::Error + Send + Sync>> {
+        // Delegate to the inherent method.
+        InjectedProvider::ethereum(self).await
+    }
 }

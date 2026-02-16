@@ -1,5 +1,7 @@
 //! Differential tests: ApiKeyStamper (TS) vs phantom-api-key-stamper (Rust).
 
+mod test_helpers;
+
 use phantom_api_key_stamper::{ApiKeyStamper, ApiKeyStamperConfig};
 use phantom_crypto::generate_key_pair;
 use phantom_differential_tests::compare::{assert_diff_match, canonicalize, CompareMode};
@@ -7,6 +9,7 @@ use phantom_differential_tests::oracle::oracle_call;
 use phantom_sdk_types::StampParams;
 use proptest::prelude::*;
 use serde_json::json;
+use test_helpers::seed_to_secret_b58;
 
 /// Helper: call TS ApiKeyStamper.stamp via oracle.
 fn ts_stamp(secret_b58: &str, data: &[u8]) -> serde_json::Value {
@@ -16,10 +19,18 @@ fn ts_stamp(secret_b58: &str, data: &[u8]) -> serde_json::Value {
 
 /// Decode a base64url stamp string into parsed JSON.
 fn decode_stamp(stamp: &str) -> serde_json::Value {
-    let bytes = phantom_base64url::base64url_decode(stamp)
-        .expect("stamp should be valid base64url");
+    let bytes =
+        phantom_base64url::base64url_decode(stamp).expect("stamp should be valid base64url");
     let s = String::from_utf8(bytes).expect("stamp should be valid UTF-8");
     serde_json::from_str(&s).expect("stamp should be valid JSON")
+}
+
+/// Create a tokio runtime for blocking on async stamp calls in tests.
+fn test_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
 }
 
 // --- Proptest: stamp PKI ---
@@ -32,14 +43,7 @@ proptest! {
         seed in proptest::collection::vec(any::<u8>(), 32..=32),
         data in proptest::collection::vec(any::<u8>(), 1..256),
     ) {
-        // Build valid secret key
-        use ed25519_dalek::SigningKey;
-        let signing_key = SigningKey::from_bytes(&seed.try_into().unwrap());
-        let verifying_key = signing_key.verifying_key();
-        let mut full_secret = [0u8; 64];
-        full_secret[..32].copy_from_slice(&signing_key.to_bytes());
-        full_secret[32..].copy_from_slice(verifying_key.as_bytes());
-        let secret_b58 = bs58::encode(&full_secret).into_string();
+        let secret_b58 = seed_to_secret_b58(&seed);
 
         // Rust stamp
         let stamper = ApiKeyStamper::new(ApiKeyStamperConfig {
@@ -47,10 +51,7 @@ proptest! {
         })
         .unwrap();
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        let rt = test_runtime();
         let rust_stamp = rt
             .block_on(phantom_sdk_types::Stamper::stamp(
                 &stamper,
@@ -89,10 +90,7 @@ fn stamp_single_byte_data() {
 
     let data = vec![42u8];
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    let rt = test_runtime();
     let rust_stamp = rt
         .block_on(phantom_sdk_types::Stamper::stamp(
             &stamper,
@@ -126,10 +124,7 @@ fn stamp_contains_expected_fields() {
 
     let data = b"test data for field validation".to_vec();
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    let rt = test_runtime();
     let rust_stamp = rt
         .block_on(phantom_sdk_types::Stamper::stamp(
             &stamper,
@@ -145,4 +140,8 @@ fn stamp_contains_expected_fields() {
     assert!(obj.contains_key("kind"), "stamp missing kind");
     assert_eq!(obj["kind"], "PKI", "stamp kind should be PKI");
     assert!(obj.contains_key("algorithm"), "stamp missing algorithm");
+    assert_eq!(
+        obj["algorithm"], "Ed25519",
+        "stamp algorithm should be Ed25519"
+    );
 }

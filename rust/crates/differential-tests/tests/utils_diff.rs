@@ -61,7 +61,7 @@ fn get_chain_prefix_known_ids() {
         ("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "solana"),
         ("bip122:000000000019d6689c085ae165831e93", "bip122"),
         ("sui:35834a8a", "sui"),
-        ("EIP155:1", "eip155"),     // case insensitive
+        ("EIP155:1", "eip155"),       // case insensitive
         ("SOLANA:mainnet", "solana"), // case insensitive
     ];
 

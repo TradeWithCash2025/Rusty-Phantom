@@ -10,9 +10,18 @@ use serde_json::json;
 
 /// All NetworkId CAIP-2 strings, matching the TS enum values exactly.
 const ALL_NETWORK_IDS: &[(&str, NetworkId)] = &[
-    ("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", NetworkId::SolanaMainnet),
-    ("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", NetworkId::SolanaDevnet),
-    ("solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z", NetworkId::SolanaTestnet),
+    (
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        NetworkId::SolanaMainnet,
+    ),
+    (
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        NetworkId::SolanaDevnet,
+    ),
+    (
+        "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+        NetworkId::SolanaTestnet,
+    ),
     ("eip155:1", NetworkId::EthereumMainnet),
     ("eip155:11155111", NetworkId::EthereumSepolia),
     ("eip155:137", NetworkId::PolygonMainnet),
@@ -23,8 +32,14 @@ const ALL_NETWORK_IDS: &[(&str, NetworkId)] = &[
     ("eip155:421614", NetworkId::ArbitrumSepolia),
     ("eip155:143", NetworkId::MonadMainnet),
     ("eip155:10143", NetworkId::MonadTestnet),
-    ("bip122:000000000019d6689c085ae165831e93", NetworkId::BitcoinMainnet),
-    ("bip122:000000000933ea01ad0ee984209779ba", NetworkId::BitcoinTestnet),
+    (
+        "bip122:000000000019d6689c085ae165831e93",
+        NetworkId::BitcoinMainnet,
+    ),
+    (
+        "bip122:000000000933ea01ad0ee984209779ba",
+        NetworkId::BitcoinTestnet,
+    ),
     ("sui:35834a8a", NetworkId::SuiMainnet),
     ("sui:4c78adac", NetworkId::SuiTestnet),
     ("sui:devnet", NetworkId::SuiDevnet),
@@ -38,7 +53,10 @@ fn get_supported_networks_matches_ts() {
     let ts_result = oracle_call("constants.getSupportedNetworks", &json!([])).unwrap_ok();
 
     // Convert Rust to sorted string list
-    let mut rust_strs: Vec<String> = rust_networks.iter().map(|n| n.as_str().to_string()).collect();
+    let mut rust_strs: Vec<String> = rust_networks
+        .iter()
+        .map(|n| n.as_str().to_string())
+        .collect();
     rust_strs.sort();
 
     // TS returns array of strings
@@ -91,9 +109,11 @@ fn get_explorer_url_matches_ts() {
             ("address", ExplorerUrlType::Address),
         ] {
             let rust_url = get_explorer_url(*network_id, *rust_type, test_value);
-            let ts_result =
-                oracle_call("constants.getExplorerUrl", &json!([caip_str, ts_type, test_value]))
-                    .unwrap_ok();
+            let ts_result = oracle_call(
+                "constants.getExplorerUrl",
+                &json!([caip_str, ts_type, test_value]),
+            )
+            .unwrap_ok();
 
             match rust_url {
                 Some(url) => {
@@ -136,22 +156,22 @@ fn get_networks_by_chain_matches_ts() {
         let rust_networks = get_networks_by_chain(chain);
         let ts_result = oracle_call("constants.getNetworksByChain", &json!([chain])).unwrap_ok();
 
-        let mut rust_strs: Vec<String> =
-            rust_networks.iter().map(|n| n.as_str().to_string()).collect();
+        let mut rust_strs: Vec<String> = rust_networks
+            .iter()
+            .map(|n| n.as_str().to_string())
+            .collect();
         rust_strs.sort();
 
+        let empty = vec![];
         let mut ts_strs: Vec<String> = ts_result
             .as_array()
-            .unwrap_or(&vec![])
+            .unwrap_or(&empty)
             .iter()
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
         ts_strs.sort();
 
-        assert_eq!(
-            rust_strs, ts_strs,
-            "getNetworksByChain({chain}) mismatch"
-        );
+        assert_eq!(rust_strs, ts_strs, "getNetworksByChain({chain}) mismatch");
     }
 }
 
@@ -159,12 +179,13 @@ fn get_networks_by_chain_matches_ts() {
 
 #[test]
 fn chain_id_to_network_id_matches_ts() {
-    let chain_ids: &[u64] = &[1, 11155111, 137, 80002, 8453, 84532, 42161, 421614, 143, 10143, 999999];
+    let chain_ids: &[u64] = &[
+        1, 11155111, 137, 80002, 8453, 84532, 42161, 421614, 143, 10143, 999999,
+    ];
 
     for &chain_id in chain_ids {
         let rust_result = chain_id_to_network_id(chain_id);
-        let ts_result =
-            oracle_call("constants.chainIdToNetworkId", &json!([chain_id])).unwrap_ok();
+        let ts_result = oracle_call("constants.chainIdToNetworkId", &json!([chain_id])).unwrap_ok();
 
         match rust_result {
             Some(nid) => {
@@ -192,8 +213,7 @@ fn chain_id_to_network_id_matches_ts() {
 fn network_id_to_chain_id_matches_ts() {
     for (caip_str, network_id) in ALL_NETWORK_IDS {
         let rust_result = network_id_to_chain_id(*network_id);
-        let ts_result =
-            oracle_call("constants.networkIdToChainId", &json!([caip_str])).unwrap_ok();
+        let ts_result = oracle_call("constants.networkIdToChainId", &json!([caip_str])).unwrap_ok();
 
         match rust_result {
             Some(chain_id) => {
@@ -220,14 +240,20 @@ fn network_id_to_chain_id_matches_ts() {
 #[test]
 fn get_provider_name_matches_ts() {
     let providers = [
-        "google", "apple", "phantom", "device", "injected", "deeplink",
-        "unknown_provider", "random_string", "",
+        "google",
+        "apple",
+        "phantom",
+        "device",
+        "injected",
+        "deeplink",
+        "unknown_provider",
+        "random_string",
+        "",
     ];
 
     for provider in &providers {
         let rust_result = get_provider_name(provider);
-        let ts_result =
-            oracle_call("constants.getProviderName", &json!([provider])).unwrap_ok();
+        let ts_result = oracle_call("constants.getProviderName", &json!([provider])).unwrap_ok();
 
         assert_diff_match(
             &CompareMode::Exact,

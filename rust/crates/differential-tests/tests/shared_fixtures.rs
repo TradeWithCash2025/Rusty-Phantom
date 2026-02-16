@@ -44,7 +44,10 @@ fn base64url_fixtures_match_both_sides() {
                 let rust_encoded = phantom_base64url::string_to_base64url(input);
                 let expected = fixture["expected_encoded"].as_str().unwrap();
 
-                assert_eq!(rust_encoded, expected, "Rust stringToBase64url fixture mismatch");
+                assert_eq!(
+                    rust_encoded, expected,
+                    "Rust stringToBase64url fixture mismatch"
+                );
                 assert_eq!(
                     ts_result.as_str().unwrap(),
                     expected,
@@ -61,7 +64,10 @@ fn base64url_fixtures_match_both_sides() {
                 let rust_encoded = phantom_base64url::base64url_encode(&input_bytes);
                 let expected = fixture["expected_encoded"].as_str().unwrap();
 
-                assert_eq!(rust_encoded, expected, "Rust base64urlEncode fixture mismatch");
+                assert_eq!(
+                    rust_encoded, expected,
+                    "Rust base64urlEncode fixture mismatch"
+                );
                 assert_eq!(
                     ts_result.as_str().unwrap(),
                     expected,
@@ -71,7 +77,7 @@ fn base64url_fixtures_match_both_sides() {
             _ => {
                 // For other functions, just verify TS oracle returns something
                 assert!(
-                    !ts_result.is_null() || fixture.get("expected").map_or(false, |v| v.is_null()),
+                    !ts_result.is_null() || fixture.get("expected").is_some_and(|v| v.is_null()),
                     "Unexpected null from TS for {fn_name}"
                 );
             }
@@ -94,8 +100,7 @@ fn crypto_fixtures_match_both_sides() {
         match fn_name {
             "crypto.createKeyPairFromSecret" => {
                 let secret_b58 = args[0].as_str().unwrap();
-                let rust_kp =
-                    phantom_crypto::create_key_pair_from_secret(secret_b58).unwrap();
+                let rust_kp = phantom_crypto::create_key_pair_from_secret(secret_b58).unwrap();
                 let expected = &fixture["expected"];
 
                 assert_eq!(
@@ -146,8 +151,11 @@ fn crypto_fixtures_match_both_sides() {
                 assert_eq!(rust_sig, expected_sig, "Rust signature fixture mismatch");
 
                 // TS should also match
-                let rust_json: Value =
-                    rust_sig.iter().map(|&b| json!(b)).collect::<Vec<_>>().into();
+                let rust_json: Value = rust_sig
+                    .iter()
+                    .map(|&b| json!(b))
+                    .collect::<Vec<_>>()
+                    .into();
                 assert_diff_match(
                     &CompareMode::ByteArray,
                     fn_name,
@@ -199,10 +207,7 @@ fn constants_fixtures_match_ts() {
                 .collect();
             exp_arr.sort();
 
-            assert_eq!(
-                ts_arr, exp_arr,
-                "TS {fn_name} fixture mismatch"
-            );
+            assert_eq!(ts_arr, exp_arr, "TS {fn_name} fixture mismatch");
         } else {
             assert_diff_match(
                 &CompareMode::CanonicalizeSortedKeys,
@@ -262,9 +267,6 @@ fn api_key_stamper_fixtures_match_both_sides() {
             ))
             .unwrap();
 
-        assert_eq!(
-            rust_stamp, expected,
-            "Rust stamp fixture mismatch"
-        );
+        assert_eq!(rust_stamp, expected, "Rust stamp fixture mismatch");
     }
 }

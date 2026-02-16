@@ -516,10 +516,10 @@ mod tests {
     #[test]
     fn all_networks_have_explorers() {
         for (_, config) in NETWORK_CONFIGS.iter() {
-            let explorer = config.explorer.as_ref().expect(&format!(
-                "Network {} should have explorer",
-                config.name
-            ));
+            let explorer = config
+                .explorer
+                .as_ref()
+                .unwrap_or_else(|| panic!("Network {} should have explorer", config.name));
             assert!(
                 explorer.transaction_url.contains("{hash}"),
                 "transaction_url for {} should contain {{hash}}",
@@ -591,21 +591,12 @@ mod tests {
 
     #[test]
     fn chain_id_roundtrip() {
-        assert_eq!(
-            chain_id_to_network_id(1),
-            Some(NetworkId::EthereumMainnet)
-        );
-        assert_eq!(
-            network_id_to_chain_id(NetworkId::EthereumMainnet),
-            Some(1)
-        );
+        assert_eq!(chain_id_to_network_id(1), Some(NetworkId::EthereumMainnet));
+        assert_eq!(network_id_to_chain_id(NetworkId::EthereumMainnet), Some(1));
     }
 
     #[test]
     fn solana_has_no_chain_id() {
-        assert_eq!(
-            network_id_to_chain_id(NetworkId::SolanaMainnet),
-            None
-        );
+        assert_eq!(network_id_to_chain_id(NetworkId::SolanaMainnet), None);
     }
 }

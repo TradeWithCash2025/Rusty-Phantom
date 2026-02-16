@@ -70,12 +70,22 @@ impl Stamper for ApiKeyStamper {
     ///
     /// Signs the provided data and returns a base64url-encoded JSON stamp
     /// containing the signature, public key, and algorithm metadata.
-    async fn stamp(&self, params: StampParams) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn stamp(
+        &self,
+        params: StampParams,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let (data, stamp_type, id_token, salt) = match &params {
             StampParams::Pki { data } => (data.as_slice(), StamperType::Pki, None, None),
-            StampParams::Oidc { data, id_token, salt } => {
-                (data.as_slice(), StamperType::Oidc, Some(id_token.as_str()), Some(salt.as_str()))
-            }
+            StampParams::Oidc {
+                data,
+                id_token,
+                salt,
+            } => (
+                data.as_slice(),
+                StamperType::Oidc,
+                Some(id_token.as_str()),
+                Some(salt.as_str()),
+            ),
         };
 
         // Sign the data
@@ -155,10 +165,7 @@ mod tests {
         let (stamper, _kp) = make_stamper();
         let data = b"test message".to_vec();
 
-        let stamp = stamper
-            .stamp(StampParams::Pki { data })
-            .await
-            .unwrap();
+        let stamp = stamper.stamp(StampParams::Pki { data }).await.unwrap();
 
         assert!(!stamp.is_empty());
 
@@ -222,10 +229,7 @@ mod tests {
             .stamp(StampParams::Pki { data: data.clone() })
             .await
             .unwrap();
-        let s2 = stamper
-            .stamp(StampParams::Pki { data })
-            .await
-            .unwrap();
+        let s2 = stamper.stamp(StampParams::Pki { data }).await.unwrap();
 
         assert_eq!(s1, s2);
     }

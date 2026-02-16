@@ -1,10 +1,15 @@
 //! Differential tests: crypto (TS tweetnacl) vs phantom-crypto (Rust ed25519-dalek).
 
-use phantom_crypto::{create_key_pair_from_secret, generate_key_pair, sign_with_secret, SecretKeyInput};
+mod test_helpers;
+
+use phantom_crypto::{
+    create_key_pair_from_secret, generate_key_pair, sign_with_secret, SecretKeyInput,
+};
 use phantom_differential_tests::compare::{assert_diff_match, CompareMode};
 use phantom_differential_tests::oracle::oracle_call;
 use proptest::prelude::*;
 use serde_json::json;
+use test_helpers::seed_to_secret_b58;
 
 /// Generate a valid base58-encoded 64-byte Ed25519 secret key using Rust.
 fn generate_valid_secret_key() -> String {
@@ -30,14 +35,7 @@ proptest! {
 
     #[test]
     fn create_keypair_from_secret_matches_ts(seed in proptest::collection::vec(any::<u8>(), 32..=32)) {
-        // Generate a valid 64-byte key from a 32-byte seed
-        use ed25519_dalek::SigningKey;
-        let signing_key = SigningKey::from_bytes(&seed.try_into().unwrap());
-        let verifying_key = signing_key.verifying_key();
-        let mut full_secret = [0u8; 64];
-        full_secret[..32].copy_from_slice(&signing_key.to_bytes());
-        full_secret[32..].copy_from_slice(verifying_key.as_bytes());
-        let secret_b58 = bs58::encode(&full_secret).into_string();
+        let secret_b58 = seed_to_secret_b58(&seed);
 
         let rust_kp = create_key_pair_from_secret(&secret_b58).unwrap();
         let ts_kp = ts_create_keypair(&secret_b58);
@@ -67,14 +65,7 @@ proptest! {
         seed in proptest::collection::vec(any::<u8>(), 32..=32),
         data in proptest::collection::vec(any::<u8>(), 0..512),
     ) {
-        // Build valid 64-byte key
-        use ed25519_dalek::SigningKey;
-        let signing_key = SigningKey::from_bytes(&seed.try_into().unwrap());
-        let verifying_key = signing_key.verifying_key();
-        let mut full_secret = [0u8; 64];
-        full_secret[..32].copy_from_slice(&signing_key.to_bytes());
-        full_secret[32..].copy_from_slice(verifying_key.as_bytes());
-        let secret_b58 = bs58::encode(&full_secret).into_string();
+        let secret_b58 = seed_to_secret_b58(&seed);
 
         let rust_sig = sign_with_secret(&SecretKeyInput::Base58(&secret_b58), &data).unwrap();
         let ts_sig = ts_sign(&secret_b58, &data);
@@ -101,7 +92,11 @@ fn sign_empty_data_matches_ts() {
     let rust_sig = sign_with_secret(&SecretKeyInput::Base58(&secret_b58), &data).unwrap();
     let ts_sig = ts_sign(&secret_b58, &data);
 
-    let rust_json: serde_json::Value = rust_sig.iter().map(|&b| json!(b)).collect::<Vec<_>>().into();
+    let rust_json: serde_json::Value = rust_sig
+        .iter()
+        .map(|&b| json!(b))
+        .collect::<Vec<_>>()
+        .into();
 
     assert_diff_match(
         &CompareMode::ByteArray,

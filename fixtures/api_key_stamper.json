@@ -1,0 +1,73 @@
+[
+  {
+    "description": "ApiKeyStamper.stamp PKI: simple message",
+    "fn": "apiKeyStamper.stamp",
+    "args": [
+      "kZGf7eHH7KRmL5cPLdfmL1wpRUgRN1YLc1Xrimk5mTo6xHew68KxbQhy3tPmwHboDFRr8LH5ZsmfxxcYV7kyrKv",
+      {
+        "__bytes__": [
+          116,
+          101,
+          115,
+          116,
+          45,
+          115,
+          116,
+          97,
+          109,
+          112,
+          45,
+          100,
+          97,
+          116,
+          97
+        ]
+      }
+    ],
+    "expected": "eyJwdWJsaWNLZXkiOiItWkVkUkI3eHdxLU4tR3pLd3pncGxJRVNzeVFrWkE4LWc0Q3AzVnRJemQwIiwic2lnbmF0dXJlIjoieTR1SXdpbzJjNnZhdy1lU1dIcUZHZmRtQ3RMaDRZbEY1MlNPejlkdDB5MnJWUklmSDRoc09WTFk0YmJFd2Q5NEtyQ200a200a2p2eWplZjJ5S1NnRFEiLCJraW5kIjoiUEtJIiwiYWxnb3JpdGhtIjoiRWQyNTUxOSJ9"
+  },
+  {
+    "description": "ApiKeyStamper.stamp PKI: JSON data",
+    "fn": "apiKeyStamper.stamp",
+    "args": [
+      "kZGf7eHH7KRmL5cPLdfmL1wpRUgRN1YLc1Xrimk5mTo6xHew68KxbQhy3tPmwHboDFRr8LH5ZsmfxxcYV7kyrKv",
+      {
+        "__bytes__": [
+          123,
+          34,
+          97,
+          99,
+          116,
+          105,
+          111,
+          110,
+          34,
+          58,
+          34,
+          115,
+          105,
+          103,
+          110,
+          34,
+          44,
+          34,
+          119,
+          97,
+          108,
+          108,
+          101,
+          116,
+          34,
+          58,
+          34,
+          97,
+          98,
+          99,
+          34,
+          125
+        ]
+      }
+    ],
+    "expected": "eyJwdWJsaWNLZXkiOiItWkVkUkI3eHdxLU4tR3pLd3pncGxJRVNzeVFrWkE4LWc0Q3AzVnRJemQwIiwic2lnbmF0dXJlIjoiRkJQN3BYeEtLMWxZOFJHTmczYnZmUzR1Z2k5TFpuY0JmQkQ0MG82QmdTTDRJRzZuajlvY19taHBwQk5yOHVFWEpzSEd1blpNZWFwWEpXblJfaEotQnciLCJraW5kIjoiUEtJIiwiYWxnb3JpdGhtIjoiRWQyNTUxOSJ9"
+  }
+]

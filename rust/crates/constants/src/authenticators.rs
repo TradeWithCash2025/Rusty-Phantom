@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 
 /// Cryptographic algorithm used for authenticator operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum Algorithm {
     /// Ed25519 elliptic curve digital signature algorithm.
-    #[serde(rename = "ed25519")]
+    #[serde(rename = "Ed25519")]
     Ed25519,
     /// ECDSA with the P-256 (secp256r1) curve.
-    #[serde(rename = "secp256r1")]
+    #[serde(rename = "Secp256r1")]
     Secp256r1,
 }
 

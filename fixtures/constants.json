@@ -1,0 +1,1125 @@
+[
+  {
+    "description": "getNetworkConfig: solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    ],
+    "expected": {
+      "name": "Solana Mainnet",
+      "chain": "solana",
+      "network": "mainnet",
+      "internalCaip": "solana:101",
+      "slip44": "501",
+      "explorer": {
+        "name": "Solscan",
+        "transactionUrl": "https://solscan.io/tx/{hash}",
+        "addressUrl": "https://solscan.io/account/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://solscan.io/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://solscan.io/account/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+    ],
+    "expected": {
+      "name": "Solana Devnet",
+      "chain": "solana",
+      "network": "devnet",
+      "internalCaip": "solana:103",
+      "slip44": "501",
+      "explorer": {
+        "name": "Solscan",
+        "transactionUrl": "https://solscan.io/tx/{hash}?cluster=devnet",
+        "addressUrl": "https://solscan.io/account/{address}?cluster=devnet"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://solscan.io/tx/abc123txhash?cluster=devnet"
+  },
+  {
+    "description": "getExplorerUrl: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://solscan.io/account/abc123address?cluster=devnet"
+  },
+  {
+    "description": "getNetworkConfig: solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z"
+    ],
+    "expected": {
+      "name": "Solana Testnet",
+      "chain": "solana",
+      "network": "testnet",
+      "internalCaip": "solana:102",
+      "slip44": "501",
+      "explorer": {
+        "name": "Solscan",
+        "transactionUrl": "https://solscan.io/tx/{hash}?cluster=testnet",
+        "addressUrl": "https://solscan.io/account/{address}?cluster=testnet"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://solscan.io/tx/abc123txhash?cluster=testnet"
+  },
+  {
+    "description": "getExplorerUrl: solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://solscan.io/account/abc123address?cluster=testnet"
+  },
+  {
+    "description": "getNetworkConfig: eip155:1",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:1"
+    ],
+    "expected": {
+      "name": "Ethereum Mainnet",
+      "chain": "ethereum",
+      "network": "mainnet",
+      "internalCaip": "eip155:1",
+      "chainId": 1,
+      "slip44": "60",
+      "explorer": {
+        "name": "Etherscan",
+        "transactionUrl": "https://etherscan.io/tx/{hash}",
+        "addressUrl": "https://etherscan.io/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:1 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:1",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://etherscan.io/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:1 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:1",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://etherscan.io/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:11155111",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:11155111"
+    ],
+    "expected": {
+      "name": "Ethereum Sepolia",
+      "chain": "ethereum",
+      "network": "sepolia",
+      "internalCaip": "eip155:11155111",
+      "chainId": 11155111,
+      "slip44": "60",
+      "explorer": {
+        "name": "Etherscan",
+        "transactionUrl": "https://sepolia.etherscan.io/tx/{hash}",
+        "addressUrl": "https://sepolia.etherscan.io/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:11155111 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:11155111",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://sepolia.etherscan.io/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:11155111 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:11155111",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://sepolia.etherscan.io/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:137",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:137"
+    ],
+    "expected": {
+      "name": "Polygon Mainnet",
+      "chain": "polygon",
+      "network": "mainnet",
+      "internalCaip": "eip155:137",
+      "chainId": 137,
+      "slip44": "137",
+      "explorer": {
+        "name": "Polygonscan",
+        "transactionUrl": "https://polygonscan.com/tx/{hash}",
+        "addressUrl": "https://polygonscan.com/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:137 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:137",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://polygonscan.com/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:137 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:137",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://polygonscan.com/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:80002",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:80002"
+    ],
+    "expected": {
+      "name": "Polygon Amoy",
+      "chain": "polygon",
+      "network": "amoy",
+      "internalCaip": "eip155:80002",
+      "chainId": 80002,
+      "slip44": "137",
+      "explorer": {
+        "name": "Polygonscan",
+        "transactionUrl": "https://amoy.polygonscan.com/tx/{hash}",
+        "addressUrl": "https://amoy.polygonscan.com/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:80002 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:80002",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://amoy.polygonscan.com/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:80002 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:80002",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://amoy.polygonscan.com/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:8453",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:8453"
+    ],
+    "expected": {
+      "name": "Base Mainnet",
+      "chain": "base",
+      "network": "mainnet",
+      "internalCaip": "eip155:8453",
+      "chainId": 8453,
+      "slip44": "8453",
+      "explorer": {
+        "name": "Basescan",
+        "transactionUrl": "https://basescan.org/tx/{hash}",
+        "addressUrl": "https://basescan.org/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:8453 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:8453",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://basescan.org/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:8453 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:8453",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://basescan.org/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:84532",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:84532"
+    ],
+    "expected": {
+      "name": "Base Sepolia",
+      "chain": "base",
+      "network": "sepolia",
+      "internalCaip": "eip155:84532",
+      "chainId": 84532,
+      "slip44": "8453",
+      "explorer": {
+        "name": "Basescan",
+        "transactionUrl": "https://sepolia.basescan.org/tx/{hash}",
+        "addressUrl": "https://sepolia.basescan.org/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:84532 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:84532",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://sepolia.basescan.org/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:84532 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:84532",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://sepolia.basescan.org/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:42161",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:42161"
+    ],
+    "expected": {
+      "name": "Arbitrum One",
+      "chain": "arbitrum",
+      "network": "mainnet",
+      "internalCaip": "eip155:42161",
+      "chainId": 42161,
+      "slip44": "42161",
+      "explorer": {
+        "name": "Arbiscan",
+        "transactionUrl": "https://arbiscan.io/tx/{hash}",
+        "addressUrl": "https://arbiscan.io/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:42161 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:42161",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://arbiscan.io/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:42161 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:42161",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://arbiscan.io/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:421614",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:421614"
+    ],
+    "expected": {
+      "name": "Arbitrum Sepolia",
+      "chain": "arbitrum",
+      "network": "sepolia",
+      "internalCaip": "eip155:421614",
+      "chainId": 421614,
+      "slip44": "42161",
+      "explorer": {
+        "name": "Arbiscan",
+        "transactionUrl": "https://sepolia.arbiscan.io/tx/{hash}",
+        "addressUrl": "https://sepolia.arbiscan.io/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:421614 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:421614",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://sepolia.arbiscan.io/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:421614 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:421614",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://sepolia.arbiscan.io/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:143",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:143"
+    ],
+    "expected": {
+      "name": "Monad Mainnet",
+      "chain": "monad",
+      "network": "mainnet",
+      "internalCaip": "eip155:143",
+      "chainId": 143,
+      "slip44": "60",
+      "explorer": {
+        "name": "Monad Explorer",
+        "transactionUrl": "https://monadexplorer.com/tx/{hash}",
+        "addressUrl": "https://monadexplorer.com/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:143 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:143",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://monadexplorer.com/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:143 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:143",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://monadexplorer.com/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: eip155:10143",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "eip155:10143"
+    ],
+    "expected": {
+      "name": "Monad Testnet",
+      "chain": "monad",
+      "network": "testnet",
+      "internalCaip": "eip155:10143",
+      "chainId": 10143,
+      "slip44": "60",
+      "explorer": {
+        "name": "Monad Testnet Explorer",
+        "transactionUrl": "https://testnet.monadexplorer.com/tx/{hash}",
+        "addressUrl": "https://testnet.monadexplorer.com/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: eip155:10143 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:10143",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://testnet.monadexplorer.com/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: eip155:10143 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "eip155:10143",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://testnet.monadexplorer.com/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: bip122:000000000019d6689c085ae165831e93",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "bip122:000000000019d6689c085ae165831e93"
+    ],
+    "expected": {
+      "name": "Bitcoin Mainnet",
+      "chain": "bitcoin",
+      "network": "mainnet",
+      "internalCaip": "bip122:000000000019d6689c085ae165831e93",
+      "slip44": "0",
+      "explorer": {
+        "name": "Blockstream",
+        "transactionUrl": "https://blockstream.info/tx/{hash}",
+        "addressUrl": "https://blockstream.info/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: bip122:000000000019d6689c085ae165831e93 transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "bip122:000000000019d6689c085ae165831e93",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://blockstream.info/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: bip122:000000000019d6689c085ae165831e93 address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "bip122:000000000019d6689c085ae165831e93",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://blockstream.info/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: bip122:000000000933ea01ad0ee984209779ba",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "bip122:000000000933ea01ad0ee984209779ba"
+    ],
+    "expected": {
+      "name": "Bitcoin Testnet",
+      "chain": "bitcoin",
+      "network": "testnet",
+      "internalCaip": "bip122:000000000933ea01ad0ee984209779ba",
+      "slip44": "0",
+      "explorer": {
+        "name": "Blockstream",
+        "transactionUrl": "https://blockstream.info/testnet/tx/{hash}",
+        "addressUrl": "https://blockstream.info/testnet/address/{address}"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: bip122:000000000933ea01ad0ee984209779ba transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "bip122:000000000933ea01ad0ee984209779ba",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://blockstream.info/testnet/tx/abc123txhash"
+  },
+  {
+    "description": "getExplorerUrl: bip122:000000000933ea01ad0ee984209779ba address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "bip122:000000000933ea01ad0ee984209779ba",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://blockstream.info/testnet/address/abc123address"
+  },
+  {
+    "description": "getNetworkConfig: sui:35834a8a",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "sui:35834a8a"
+    ],
+    "expected": {
+      "name": "Sui Mainnet",
+      "chain": "sui",
+      "network": "mainnet",
+      "internalCaip": "sui:mainnet",
+      "slip44": "784",
+      "explorer": {
+        "name": "Sui Explorer",
+        "transactionUrl": "https://explorer.sui.io/txblock/{hash}?network=mainnet",
+        "addressUrl": "https://explorer.sui.io/address/{address}?network=mainnet"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: sui:35834a8a transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:35834a8a",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://explorer.sui.io/txblock/abc123txhash?network=mainnet"
+  },
+  {
+    "description": "getExplorerUrl: sui:35834a8a address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:35834a8a",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://explorer.sui.io/address/abc123address?network=mainnet"
+  },
+  {
+    "description": "getNetworkConfig: sui:4c78adac",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "sui:4c78adac"
+    ],
+    "expected": {
+      "name": "Sui Testnet",
+      "chain": "sui",
+      "network": "testnet",
+      "internalCaip": "sui:testnet",
+      "slip44": "784",
+      "explorer": {
+        "name": "Sui Explorer",
+        "transactionUrl": "https://explorer.sui.io/txblock/{hash}?network=testnet",
+        "addressUrl": "https://explorer.sui.io/address/{address}?network=testnet"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: sui:4c78adac transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:4c78adac",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://explorer.sui.io/txblock/abc123txhash?network=testnet"
+  },
+  {
+    "description": "getExplorerUrl: sui:4c78adac address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:4c78adac",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://explorer.sui.io/address/abc123address?network=testnet"
+  },
+  {
+    "description": "getNetworkConfig: sui:devnet",
+    "fn": "constants.getNetworkConfig",
+    "args": [
+      "sui:devnet"
+    ],
+    "expected": {
+      "name": "Sui Devnet",
+      "chain": "sui",
+      "network": "devnet",
+      "internalCaip": "sui:devnet",
+      "slip44": "784",
+      "explorer": {
+        "name": "Sui Explorer",
+        "transactionUrl": "https://explorer.sui.io/txblock/{hash}?network=devnet",
+        "addressUrl": "https://explorer.sui.io/address/{address}?network=devnet"
+      }
+    }
+  },
+  {
+    "description": "getExplorerUrl: sui:devnet transaction",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:devnet",
+      "transaction",
+      "abc123txhash"
+    ],
+    "expected": "https://explorer.sui.io/txblock/abc123txhash?network=devnet"
+  },
+  {
+    "description": "getExplorerUrl: sui:devnet address",
+    "fn": "constants.getExplorerUrl",
+    "args": [
+      "sui:devnet",
+      "address",
+      "abc123address"
+    ],
+    "expected": "https://explorer.sui.io/address/abc123address?network=devnet"
+  },
+  {
+    "description": "getSupportedNetworks",
+    "fn": "constants.getSupportedNetworks",
+    "args": [],
+    "expected": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+      "eip155:1",
+      "eip155:11155111",
+      "eip155:137",
+      "eip155:80002",
+      "eip155:8453",
+      "eip155:84532",
+      "eip155:42161",
+      "eip155:421614",
+      "eip155:143",
+      "eip155:10143",
+      "bip122:000000000019d6689c085ae165831e93",
+      "bip122:000000000933ea01ad0ee984209779ba",
+      "sui:35834a8a",
+      "sui:4c78adac",
+      "sui:devnet"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: solana",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "solana"
+    ],
+    "expected": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: ethereum",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "ethereum"
+    ],
+    "expected": [
+      "eip155:1",
+      "eip155:11155111"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: polygon",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "polygon"
+    ],
+    "expected": [
+      "eip155:137",
+      "eip155:80002"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: base",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "base"
+    ],
+    "expected": [
+      "eip155:8453",
+      "eip155:84532"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: arbitrum",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "arbitrum"
+    ],
+    "expected": [
+      "eip155:42161",
+      "eip155:421614"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: monad",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "monad"
+    ],
+    "expected": [
+      "eip155:143",
+      "eip155:10143"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: bitcoin",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "bitcoin"
+    ],
+    "expected": [
+      "bip122:000000000019d6689c085ae165831e93",
+      "bip122:000000000933ea01ad0ee984209779ba"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: sui",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "sui"
+    ],
+    "expected": [
+      "sui:35834a8a",
+      "sui:4c78adac",
+      "sui:devnet"
+    ]
+  },
+  {
+    "description": "getNetworksByChain: nonexistent",
+    "fn": "constants.getNetworksByChain",
+    "args": [
+      "nonexistent"
+    ],
+    "expected": []
+  },
+  {
+    "description": "chainIdToNetworkId: 1",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      1
+    ],
+    "expected": "eip155:1"
+  },
+  {
+    "description": "chainIdToNetworkId: 11155111",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      11155111
+    ],
+    "expected": "eip155:11155111"
+  },
+  {
+    "description": "chainIdToNetworkId: 137",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      137
+    ],
+    "expected": "eip155:137"
+  },
+  {
+    "description": "chainIdToNetworkId: 80002",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      80002
+    ],
+    "expected": "eip155:80002"
+  },
+  {
+    "description": "chainIdToNetworkId: 8453",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      8453
+    ],
+    "expected": "eip155:8453"
+  },
+  {
+    "description": "chainIdToNetworkId: 84532",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      84532
+    ],
+    "expected": "eip155:84532"
+  },
+  {
+    "description": "chainIdToNetworkId: 42161",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      42161
+    ],
+    "expected": "eip155:42161"
+  },
+  {
+    "description": "chainIdToNetworkId: 421614",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      421614
+    ],
+    "expected": "eip155:421614"
+  },
+  {
+    "description": "chainIdToNetworkId: 143",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      143
+    ],
+    "expected": "eip155:143"
+  },
+  {
+    "description": "chainIdToNetworkId: 10143",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      10143
+    ],
+    "expected": "eip155:10143"
+  },
+  {
+    "description": "chainIdToNetworkId: 999999",
+    "fn": "constants.chainIdToNetworkId",
+    "args": [
+      999999
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: eip155:1",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:1"
+    ],
+    "expected": 1
+  },
+  {
+    "description": "networkIdToChainId: eip155:11155111",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:11155111"
+    ],
+    "expected": 11155111
+  },
+  {
+    "description": "networkIdToChainId: eip155:137",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:137"
+    ],
+    "expected": 137
+  },
+  {
+    "description": "networkIdToChainId: eip155:80002",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:80002"
+    ],
+    "expected": 80002
+  },
+  {
+    "description": "networkIdToChainId: eip155:8453",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:8453"
+    ],
+    "expected": 8453
+  },
+  {
+    "description": "networkIdToChainId: eip155:84532",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:84532"
+    ],
+    "expected": 84532
+  },
+  {
+    "description": "networkIdToChainId: eip155:42161",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:42161"
+    ],
+    "expected": 42161
+  },
+  {
+    "description": "networkIdToChainId: eip155:421614",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:421614"
+    ],
+    "expected": 421614
+  },
+  {
+    "description": "networkIdToChainId: eip155:143",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:143"
+    ],
+    "expected": 143
+  },
+  {
+    "description": "networkIdToChainId: eip155:10143",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "eip155:10143"
+    ],
+    "expected": 10143
+  },
+  {
+    "description": "networkIdToChainId: bip122:000000000019d6689c085ae165831e93",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "bip122:000000000019d6689c085ae165831e93"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: bip122:000000000933ea01ad0ee984209779ba",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "bip122:000000000933ea01ad0ee984209779ba"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: sui:35834a8a",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "sui:35834a8a"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: sui:4c78adac",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "sui:4c78adac"
+    ],
+    "expected": null
+  },
+  {
+    "description": "networkIdToChainId: sui:devnet",
+    "fn": "constants.networkIdToChainId",
+    "args": [
+      "sui:devnet"
+    ],
+    "expected": null
+  },
+  {
+    "description": "getProviderName: google",
+    "fn": "constants.getProviderName",
+    "args": [
+      "google"
+    ],
+    "expected": "Google"
+  },
+  {
+    "description": "getProviderName: apple",
+    "fn": "constants.getProviderName",
+    "args": [
+      "apple"
+    ],
+    "expected": "Apple"
+  },
+  {
+    "description": "getProviderName: phantom",
+    "fn": "constants.getProviderName",
+    "args": [
+      "phantom"
+    ],
+    "expected": "Phantom"
+  },
+  {
+    "description": "getProviderName: device",
+    "fn": "constants.getProviderName",
+    "args": [
+      "device"
+    ],
+    "expected": "Device"
+  },
+  {
+    "description": "getProviderName: injected",
+    "fn": "constants.getProviderName",
+    "args": [
+      "injected"
+    ],
+    "expected": "Wallet"
+  },
+  {
+    "description": "getProviderName: deeplink",
+    "fn": "constants.getProviderName",
+    "args": [
+      "deeplink"
+    ],
+    "expected": "Deeplink"
+  },
+  {
+    "description": "getProviderName: unknown_provider",
+    "fn": "constants.getProviderName",
+    "args": [
+      "unknown_provider"
+    ],
+    "expected": "Wallet"
+  }
+]

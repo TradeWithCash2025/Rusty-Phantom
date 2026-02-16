@@ -1,0 +1,23 @@
+[package]
+name = "phantom-differential-tests"
+version.workspace = true
+edition.workspace = true
+description = "Cross-language differential tests: Rust vs TypeScript oracle"
+
+[dependencies]
+phantom-base64url = { workspace = true }
+phantom-crypto = { workspace = true }
+phantom-constants = { workspace = true }
+phantom-utils = { workspace = true }
+phantom-sdk-types = { workspace = true }
+phantom-api-key-stamper = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+once_cell = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+tokio = { workspace = true, features = ["rt", "macros"] }
+bs58 = { workspace = true }
+ed25519-dalek = { workspace = true }

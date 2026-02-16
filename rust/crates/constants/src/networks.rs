@@ -60,6 +60,7 @@ pub enum InternalNetworkCaip {
 
 /// Block explorer configuration for a network.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExplorerConfig {
     /// Name of the explorer service.
     pub name: String,
@@ -71,6 +72,7 @@ pub struct ExplorerConfig {
 
 /// Configuration for a blockchain network.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkConfig {
     /// Human-readable network name.
     pub name: String,
@@ -79,12 +81,16 @@ pub struct NetworkConfig {
     /// Network name within the chain (e.g., "mainnet", "testnet").
     pub network: String,
     /// Internal CAIP identifier for extension communication.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_caip: Option<InternalNetworkCaip>,
     /// EIP-155 chain ID (for EVM networks).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chain_id: Option<u64>,
     /// SLIP-44 coin type.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub slip44: Option<String>,
     /// Block explorer configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub explorer: Option<ExplorerConfig>,
 }
 

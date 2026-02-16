@@ -31,7 +31,7 @@ struct PkiStampData {
     public_key: String,
     signature: String,
     kind: String,
-    algorithm: String,
+    algorithm: Algorithm,
 }
 
 /// OIDC stamp data structure for JSON serialization.
@@ -43,7 +43,7 @@ struct OidcStampData {
     #[serde(rename = "publicKey")]
     public_key: String,
     salt: String,
-    algorithm: String,
+    algorithm: Algorithm,
     signature: String,
 }
 
@@ -90,7 +90,7 @@ impl Stamper for ApiKeyStamper {
                     public_key: public_key_b64,
                     signature: signature_base64url,
                     kind: "PKI".to_string(),
-                    algorithm: "ed25519".to_string(),
+                    algorithm: self.algorithm(),
                 };
                 serde_json::to_string(&stamp)?
             }
@@ -100,7 +100,7 @@ impl Stamper for ApiKeyStamper {
                     id_token: id_token.unwrap_or_default().to_string(),
                     public_key: public_key_b64,
                     salt: salt.unwrap_or_default().to_string(),
-                    algorithm: "ed25519".to_string(),
+                    algorithm: self.algorithm(),
                     signature: signature_base64url,
                 };
                 serde_json::to_string(&stamp)?

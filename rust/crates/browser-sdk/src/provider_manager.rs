@@ -416,6 +416,9 @@ impl ProviderManager {
             .await
             .ok_or("No provider selected")?;
 
+        // Ensure event forwarding is set up for the current provider.
+        self.setup_event_forwarding(&provider).await;
+
         let result = provider.connect(auth_options).await?;
 
         // Save provider preference after successful connection
@@ -688,33 +691,43 @@ impl ProviderManager {
         params
     }
 
+    /// Get a reference to the concrete injected provider, if available.
+    ///
+    /// This provides direct access to chain-specific methods (e.g., `solana()`,
+    /// `ethereum()`) that are not part of the generic `Provider` trait.
+    ///
+    /// (Alias kept for backwards compatibility.)
+    #[allow(dead_code)]
+    async fn get_injected_provider_internal(&self) -> Option<Arc<InjectedProvider>> {
+        self.injected_provider.read().await.clone()
+    }
+
     /// Set up event forwarding from a provider to this ProviderManager.
     ///
-    /// Listens on the provider's event registry (via the `Provider::on` trait
-    /// method — which the injected provider implements through its
-    /// `EventListenerRegistry`) and re-emits those events through the
-    /// ProviderManager's own listeners.
+    /// Listens on the provider's event registry and re-emits those events
+    /// through the ProviderManager's own listeners.
     ///
-    /// Matches the TypeScript `ensureProviderEventForwarding()` which forwards
-    /// `connect_start`, `connect`, `connect_error`, `disconnect`, `error`, and
+    /// Only sets up forwarding once per provider instance (tracked by pointer
+    /// identity) to avoid accumulation. Matches the TypeScript
+    /// `ensureProviderEventForwarding()` which forwards `connect_start`,
+    /// `connect`, `connect_error`, `disconnect`, `error`, and
     /// `spending_limit_reached` events.
     async fn setup_event_forwarding(&self, provider: &Arc<dyn Provider>) {
-        // We forward events by registering a listener on the provider (via the
-        // InjectedProvider's `on` method) that calls our own `emit`.
-        //
-        // The injected provider exposes `on`/`off` through the Provider trait
-        // which isn't available on all providers. For providers that *are*
-        // InjectedProvider, we can downcast. For embedded providers, their
-        // events are already forwarded through their own mechanism.
-        //
-        // We use a simple approach: try to get the concrete injected provider
-        // and forward its events.
+        // Use raw pointer as identity for deduplication.
+        let ptr = Arc::as_ptr(provider) as *const () as usize;
+        {
+            let setup = self.forwarding_setup.read().await;
+            if setup.contains(&ptr) {
+                return;
+            }
+        }
+
+        // The injected provider exposes `on`/`off` through its public API.
+        // For the injected provider, we register forwarding callbacks.
         if let Some(ref injected) = *self.injected_provider.read().await {
-            if Arc::ptr_eq(
-                &(provider.clone() as Arc<dyn Provider>),
-                &(injected.clone() as Arc<dyn Provider>),
-            ) {
-                // This provider IS the injected provider -- forward events.
+            // Compare by pointer identity to check if this IS the injected provider.
+            let injected_ptr = Arc::as_ptr(injected) as *const InjectedProvider as *const () as usize;
+            if ptr == injected_ptr {
                 let events_to_forward = [
                     "connect_start",
                     "connect",
@@ -722,7 +735,6 @@ impl ProviderManager {
                     "disconnect",
                 ];
 
-                // Clone the event_listeners Arc for use in closures.
                 let listeners = self.event_listeners.clone();
 
                 for event_name in events_to_forward {
@@ -743,7 +755,7 @@ impl ProviderManager {
                                             }),
                                         ) {
                                             tracing::error!(
-                                                ?e, event = %evt,
+                                                ?e,
                                                 "Forwarded event callback panicked"
                                             );
                                         }
@@ -755,6 +767,9 @@ impl ProviderManager {
                 }
             }
         }
+
+        // Mark this provider as having forwarding set up.
+        self.forwarding_setup.write().await.push(ptr);
     }
 }
 

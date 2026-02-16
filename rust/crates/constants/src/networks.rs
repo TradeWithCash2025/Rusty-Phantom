@@ -60,6 +60,7 @@ pub enum InternalNetworkCaip {
 
 /// Block explorer configuration for a network.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExplorerConfig {
     /// Name of the explorer service.
     pub name: String,
@@ -71,6 +72,7 @@ pub struct ExplorerConfig {
 
 /// Configuration for a blockchain network.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkConfig {
     /// Human-readable network name.
     pub name: String,
@@ -79,12 +81,16 @@ pub struct NetworkConfig {
     /// Network name within the chain (e.g., "mainnet", "testnet").
     pub network: String,
     /// Internal CAIP identifier for extension communication.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_caip: Option<InternalNetworkCaip>,
     /// EIP-155 chain ID (for EVM networks).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chain_id: Option<u64>,
     /// SLIP-44 coin type.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub slip44: Option<String>,
     /// Block explorer configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub explorer: Option<ExplorerConfig>,
 }
 
@@ -510,10 +516,10 @@ mod tests {
     #[test]
     fn all_networks_have_explorers() {
         for (_, config) in NETWORK_CONFIGS.iter() {
-            let explorer = config.explorer.as_ref().expect(&format!(
-                "Network {} should have explorer",
-                config.name
-            ));
+            let explorer = config
+                .explorer
+                .as_ref()
+                .unwrap_or_else(|| panic!("Network {} should have explorer", config.name));
             assert!(
                 explorer.transaction_url.contains("{hash}"),
                 "transaction_url for {} should contain {{hash}}",
@@ -585,21 +591,12 @@ mod tests {
 
     #[test]
     fn chain_id_roundtrip() {
-        assert_eq!(
-            chain_id_to_network_id(1),
-            Some(NetworkId::EthereumMainnet)
-        );
-        assert_eq!(
-            network_id_to_chain_id(NetworkId::EthereumMainnet),
-            Some(1)
-        );
+        assert_eq!(chain_id_to_network_id(1), Some(NetworkId::EthereumMainnet));
+        assert_eq!(network_id_to_chain_id(NetworkId::EthereumMainnet), Some(1));
     }
 
     #[test]
     fn solana_has_no_chain_id() {
-        assert_eq!(
-            network_id_to_chain_id(NetworkId::SolanaMainnet),
-            None
-        );
+        assert_eq!(network_id_to_chain_id(NetworkId::SolanaMainnet), None);
     }
 }

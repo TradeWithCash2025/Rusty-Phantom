@@ -23,6 +23,7 @@ members = [
     "examples/multi-auth-demo",
     "examples/list-wallets",
     "examples/sign-message",
+    "crates/differential-tests",
 ]
 
 [workspace.package]

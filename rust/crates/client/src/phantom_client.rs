@@ -390,6 +390,8 @@ impl PhantomClient {
                     .map(|w| Wallet {
                         wallet_id: w["walletId"].as_str().unwrap_or_default().to_string(),
                         wallet_name: w["walletName"].as_str().unwrap_or_default().to_string(),
+                        created_at: w["createdAt"].as_str().map(|s| s.to_string()),
+                        updated_at: w["updatedAt"].as_str().map(|s| s.to_string()),
                     })
                     .collect()
             })

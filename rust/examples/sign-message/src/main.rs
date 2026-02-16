@@ -15,6 +15,7 @@
 //! Optional environment variables:
 //!   WALLET_API               - API base URL (defaults to staging)
 
+use phantom_base64url::{base64url_decode, string_to_base64url};
 use phantom_constants::NetworkId;
 use phantom_server_sdk::{ServerSdk, ServerSdkConfig, ServerSignMessageParams};
 
@@ -31,6 +32,11 @@ fn env_required(key: &str) -> String {
         eprintln!("  APP_ID                   - Application ID");
         std::process::exit(1);
     })
+}
+
+/// Encode bytes as a hex string.
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Parse command line arguments.
@@ -84,18 +90,24 @@ fn parse_args() -> CliArgs {
     }
 }
 
-/// Get or create a wallet, returning (wallet_id, is_new).
+/// Get or create a wallet, returning (wallet_id, solana_address, is_new).
 async fn get_or_create_wallet(
     sdk: &ServerSdk,
     wallet_id: Option<&str>,
     wallet_name: Option<&str>,
-) -> Result<(String, bool), Box<dyn std::error::Error>> {
-    // If wallet ID is provided, verify it exists
+) -> Result<(String, String, bool), Box<dyn std::error::Error>> {
+    // If wallet ID is provided, verify it exists and get Solana address
     if let Some(id) = wallet_id {
         println!("Using wallet ID: {}", id);
-        // Verify the wallet exists by fetching addresses
         match sdk.get_wallet_addresses(id, None, None).await {
-            Ok(_) => return Ok((id.to_string(), false)),
+            Ok(addresses) => {
+                let solana_address = addresses
+                    .iter()
+                    .find(|a| a.address_type.to_lowercase() == "solana")
+                    .map(|a| a.address.clone())
+                    .ok_or("Wallet does not have a Solana address")?;
+                return Ok((id.to_string(), solana_address, false));
+            }
             Err(e) => {
                 eprintln!("Failed to get wallet addresses: {}", e);
                 std::process::exit(1);
@@ -109,7 +121,15 @@ async fn get_or_create_wallet(
         if let Ok(result) = sdk.get_wallets(Some(100), Some(0)).await {
             if let Some(existing) = result.wallets.iter().find(|w| w.wallet_name == name) {
                 println!("Found existing wallet: {}", existing.wallet_id);
-                return Ok((existing.wallet_id.clone(), false));
+                let addresses = sdk
+                    .get_wallet_addresses(&existing.wallet_id, None, None)
+                    .await?;
+                let solana_address = addresses
+                    .iter()
+                    .find(|a| a.address_type.to_lowercase() == "solana")
+                    .map(|a| a.address.clone())
+                    .ok_or("Wallet does not have a Solana address")?;
+                return Ok((existing.wallet_id.clone(), solana_address, false));
             }
         }
     }
@@ -130,8 +150,14 @@ async fn get_or_create_wallet(
 
     match sdk.create_wallet(&wallet_name).await {
         Ok(wallet) => {
+            let solana_address = wallet
+                .addresses
+                .iter()
+                .find(|a| a.address_type.to_lowercase() == "solana")
+                .map(|a| a.address.clone())
+                .ok_or("Created wallet does not have a Solana address")?;
             println!("Wallet created: {}", wallet.wallet_id);
-            Ok((wallet.wallet_id, true))
+            Ok((wallet.wallet_id, solana_address, true))
         }
         Err(e) => {
             eprintln!("Failed to create wallet: {}", e);
@@ -164,7 +190,7 @@ async fn main() {
     });
 
     // Get or create wallet
-    let (wallet_id, is_new) = match get_or_create_wallet(
+    let (wallet_id, solana_address, is_new) = match get_or_create_wallet(
         &sdk,
         cli_args.wallet_id.as_deref(),
         cli_args.wallet_name.as_deref(),
@@ -185,8 +211,13 @@ async fn main() {
         "   UTF-8 bytes: {}",
         cli_args.message.as_bytes().len()
     );
+    println!(
+        "   Base64url encoded: {}",
+        string_to_base64url(&cli_args.message)
+    );
     println!("\nWallet Details:");
     println!("   Wallet ID: {}", wallet_id);
+    println!("   Solana Address: {}", solana_address);
     println!(
         "   Status: {}",
         if is_new {
@@ -220,13 +251,33 @@ async fn main() {
             println!("   Human-readable: {}", result.signature);
             println!("   Raw (base64url): {}", result.raw_signature);
             println!("   Length: {} characters", result.raw_signature.len());
+            if let Some(ref explorer) = result.block_explorer {
+                println!("   Block Explorer: {}", explorer);
+            }
+
+            // Convert raw signature to other formats
+            if let Ok(signature_bytes) = base64url_decode(&result.raw_signature) {
+                let signature_hex = hex_encode(&signature_bytes);
+                let first_8: Vec<String> = signature_bytes
+                    .iter()
+                    .take(8)
+                    .map(|b| b.to_string())
+                    .collect();
+
+                println!("   Hex: {}", signature_hex);
+                println!(
+                    "   Bytes: [{}...] ({} bytes)",
+                    first_8.join(", "),
+                    signature_bytes.len()
+                );
+            }
 
             // Verification info
             println!("\nVerification Info:");
             println!("   To verify this signature:");
-            println!("   - Wallet ID: {}", wallet_id);
+            println!("   - Public Key: {}", solana_address);
             println!("   - Message: \"{}\"", cli_args.message);
-            println!("   - Signature (base64url): {}", result.raw_signature);
+            println!("   - Signature (base64): {}", result.raw_signature);
 
             println!("\nTips:");
             println!("   - This signature was created using the Solana network context");

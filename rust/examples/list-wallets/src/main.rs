@@ -1,6 +1,7 @@
 //! Phantom List Wallets Demo
 //!
-//! Lists all wallets in an organization with pagination and summary statistics.
+//! Lists all wallets in an organization with pagination, per-wallet address
+//! details, timestamp formatting, address type statistics and summary.
 //!
 //! Usage:
 //!   cargo run --bin phantom-list-wallets
@@ -13,6 +14,7 @@
 //! Optional environment variables:
 //!   WALLET_API               - API base URL (defaults to staging)
 
+use chrono::DateTime;
 use phantom_server_sdk::{ServerSdk, ServerSdkConfig};
 use std::collections::HashMap;
 
@@ -29,6 +31,13 @@ fn env_required(key: &str) -> String {
         eprintln!("  APP_ID                   - Application ID");
         std::process::exit(1);
     })
+}
+
+/// Format an ISO 8601 date string to a human-readable local representation.
+fn format_date(date_string: &str) -> String {
+    DateTime::parse_from_rfc3339(date_string)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S %Z").to_string())
+        .unwrap_or_else(|_| date_string.to_string())
 }
 
 #[tokio::main]
@@ -91,29 +100,88 @@ async fn main() {
         }
     }
 
+    // Fetch addresses for each wallet and collect them alongside the wallets.
+    // The list API only returns wallet_id and wallet_name, so we call
+    // get_wallet_addresses per wallet (mirroring the TS version which has
+    // addresses inline).
+    println!("Fetching addresses for each wallet...\n");
+
+    // Vec of (wallet, addresses) pairs
+    let mut wallet_addresses: Vec<(
+        phantom_server_sdk::Wallet,
+        Vec<phantom_server_sdk::phantom_client::WalletAddress>,
+    )> = Vec::new();
+
+    for wallet in &all_wallets {
+        let addresses = match sdk
+            .get_wallet_addresses(&wallet.wallet_id, None, None)
+            .await
+        {
+            Ok(addrs) => addrs,
+            Err(e) => {
+                eprintln!(
+                    "  Warning: could not fetch addresses for wallet {}: {}",
+                    wallet.wallet_id, e
+                );
+                Vec::new()
+            }
+        };
+        wallet_addresses.push((wallet.clone(), addresses));
+    }
+
     // Display wallet information
     println!("Wallet Details:\n");
     println!("{}", "-".repeat(100));
 
-    for (index, wallet) in all_wallets.iter().enumerate() {
+    for (index, (wallet, addresses)) in wallet_addresses.iter().enumerate() {
         println!("\nWallet #{}", index + 1);
-        println!("   ID: {}", wallet.wallet_id);
-        println!("   Name: {}", wallet.wallet_name);
+        println!("   ID:      {}", wallet.wallet_id);
+        println!(
+            "   Name:    {}",
+            if wallet.wallet_name.is_empty() {
+                "Unnamed"
+            } else {
+                &wallet.wallet_name
+            }
+        );
+
+        // Timestamps
+        if let Some(ref created) = wallet.created_at {
+            println!("   Created: {}", format_date(created));
+        }
+        if let Some(ref updated) = wallet.updated_at {
+            println!("   Updated: {}", format_date(updated));
+        }
+
+        // Per-wallet addresses
+        if !addresses.is_empty() {
+            println!("   Addresses:");
+            for addr in addresses {
+                println!("     - {}: {}", addr.address_type, addr.address);
+            }
+        }
+
         println!("{}", "-".repeat(100));
     }
 
     // Summary statistics
-    let address_types: HashMap<String, u64> = HashMap::new();
-    // Note: Wallet type in the list API returns wallet_id and wallet_name only.
-    // To get addresses, use get_wallet_addresses for each wallet.
-
     println!("\nSummary:");
     println!("   Total wallets: {}", total_wallets);
 
+    // Calculate address type distribution
+    let mut address_types: HashMap<String, u64> = HashMap::new();
+    for (_wallet, addresses) in &wallet_addresses {
+        for addr in addresses {
+            *address_types.entry(addr.address_type.clone()).or_insert(0) += 1;
+        }
+    }
+
     if !address_types.is_empty() {
         println!("   Address types:");
-        for (addr_type, count) in &address_types {
-            println!("     {} : {} addresses", addr_type, count);
+        let mut sorted_types: Vec<_> = address_types.iter().collect();
+        sorted_types.sort_by_key(|(k, _)| (*k).clone());
+        for (addr_type, count) in sorted_types {
+            println!("     - {}: {} addresses", addr_type, count);
         }
     }
 

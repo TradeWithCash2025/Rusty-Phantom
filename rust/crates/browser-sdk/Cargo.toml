@@ -19,3 +19,4 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["time", "sync"] }
 thiserror = { workspace = true }
 regex = "1"
+bs58 = { workspace = true }

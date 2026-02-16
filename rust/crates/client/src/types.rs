@@ -93,6 +93,12 @@ pub struct Wallet {
     pub wallet_id: String,
     /// The wallet display name.
     pub wallet_name: String,
+    /// When the wallet was created (ISO 8601).
+    #[serde(default)]
+    pub created_at: Option<String>,
+    /// When the wallet was last updated (ISO 8601).
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 /// Parameters for signing a message.

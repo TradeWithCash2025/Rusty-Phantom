@@ -3,8 +3,8 @@
 //! Implements the [`PhantomAppProvider`] trait from `phantom-embedded-provider-core`.
 //! In the TypeScript SDK, this communicates with the Phantom browser extension
 //! via `window.phantom.solana` to authenticate using the Phantom app (extension
-//! or mobile). In native Rust, this provides a stub that reports the Phantom
-//! app as unavailable, since direct extension communication requires a browser
+//! or mobile). In native Rust, this reports the Phantom app as unavailable by
+//! default, since direct extension communication requires a browser
 //! runtime. Platform integrations (e.g., wasm-bindgen) can supply a real
 //! implementation via the [`PhantomAppCallback`] hook.
 

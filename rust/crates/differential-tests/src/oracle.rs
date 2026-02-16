@@ -7,8 +7,11 @@
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 /// Default timeout for oracle responses in seconds.
 const ORACLE_TIMEOUT_SECS: u64 = 30;
@@ -43,21 +46,28 @@ impl OracleResult {
 }
 
 /// A persistent Node.js oracle process.
+///
+/// Stdout is read by a dedicated background thread that sends lines over an
+/// `mpsc` channel.  This allows `call()` to enforce the `ORACLE_TIMEOUT_SECS`
+/// deadline using `recv_timeout()` — the Rust equivalent of the TS SDK's
+/// `setTimeout(() => reject(...), timeoutMs)` pattern.
 pub struct OracleProcess {
     child: Child,
     stdin: BufWriter<ChildStdin>,
-    stdout: BufReader<ChildStdout>,
+    response_rx: mpsc::Receiver<Result<String, String>>,
+    _reader_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Drop for OracleProcess {
     fn drop(&mut self) {
-        // Flush any buffered stdin data, then kill the process.
-        // Closing stdin would signal EOF to the Node process, but since
-        // we hold a BufWriter<ChildStdin> we can't take ownership here.
-        // Instead, just kill the child process directly.
         let _ = self.stdin.flush();
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // Reader thread exits when stdout closes after kill.
+        // Join it to prevent thread leak.
+        if let Some(handle) = self._reader_handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -102,10 +112,34 @@ impl OracleProcess {
             .take()
             .ok_or_else(|| "Failed to capture oracle stdout".to_string())?;
 
+        let (tx, rx) = mpsc::channel();
+        let reader_handle = thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            loop {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) => {
+                        let _ = tx.send(Err("Oracle process closed stdout (EOF)".to_string()));
+                        break;
+                    }
+                    Ok(_) => {
+                        if tx.send(Ok(line)).is_err() {
+                            break; // Receiver dropped
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Oracle stdout read error: {e}")));
+                        break;
+                    }
+                }
+            }
+        });
+
         Ok(Self {
             child,
             stdin: BufWriter::new(stdin),
-            stdout: BufReader::new(stdout),
+            response_rx: rx,
+            _reader_handle: Some(reader_handle),
         })
     }
 
@@ -115,11 +149,11 @@ impl OracleProcess {
     }
 
     /// Call a TS function via the oracle.
+    ///
+    /// Sends the request over stdin and waits up to `ORACLE_TIMEOUT_SECS` for
+    /// a response line from the background reader thread.  This mirrors the TS
+    /// SDK's `setTimeout(() => reject(new Error("timeout")), timeoutMs)` pattern.
     pub fn call(&mut self, fn_name: &str, args: &Value) -> Result<OracleResult, String> {
-        if !self.is_alive() {
-            return Err("Oracle process has exited".to_string());
-        }
-
         let request = serde_json::json!({
             "fn": fn_name,
             "args": args,
@@ -138,17 +172,22 @@ impl OracleProcess {
             .flush()
             .map_err(|e| format!("Failed to flush oracle stdin: {e}"))?;
 
-        // Read the response line. This blocks until the oracle writes back.
-        // Note: A proper timeout would require async I/O or platform-specific
-        // non-blocking reads. For test infrastructure this blocking approach
-        // is acceptable — if the oracle hangs, the test runner's own timeout
-        // (e.g., `cargo test` timeout or CI job timeout) will catch it.
-        let mut response_line = String::new();
-        self.stdout
-            .read_line(&mut response_line)
-            .map_err(|e| format!("Failed to read from oracle stdout: {e}"))?;
+        // Wait for response with timeout — equivalent to the TS SDK's
+        // `setTimeout(() => reject(new Error("timeout")), this.timeoutMs)`.
+        let response_line = self
+            .response_rx
+            .recv_timeout(Duration::from_secs(ORACLE_TIMEOUT_SECS))
+            .map_err(|e| match e {
+                mpsc::RecvTimeoutError::Timeout => format!(
+                    "Oracle timed out after {ORACLE_TIMEOUT_SECS}s waiting for response to '{fn_name}'"
+                ),
+                mpsc::RecvTimeoutError::Disconnected => {
+                    "Oracle reader thread disconnected (process may have crashed)".to_string()
+                }
+            })?
+            .map_err(|e| format!("Oracle read error for '{fn_name}': {e}"))?;
 
-        if response_line.is_empty() {
+        if response_line.trim().is_empty() {
             return Err("Oracle returned empty response (process may have crashed)".to_string());
         }
 

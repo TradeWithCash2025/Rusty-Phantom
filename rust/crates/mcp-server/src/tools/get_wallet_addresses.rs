@@ -40,9 +40,10 @@ async fn handle_get_wallet_addresses(
         .get_wallet_addresses(&context.session.wallet_id, None, derivation_index)
         .await?;
 
-    context
-        .logger
-        .info(&format!("Successfully retrieved {} addresses", addresses.len()));
+    context.logger.info(&format!(
+        "Successfully retrieved {} addresses",
+        addresses.len()
+    ));
 
     let address_list: Vec<Value> = addresses
         .iter()

@@ -5,8 +5,7 @@
 //! Phantom app, logger) into a single platform interface.
 
 use phantom_embedded_provider_core::{
-    AuthProvider, EmbeddedStorage, PlatformAdapter, PhantomAppProvider,
-    UrlParamsAccessor,
+    AuthProvider, EmbeddedStorage, PhantomAppProvider, PlatformAdapter, UrlParamsAccessor,
 };
 use phantom_sdk_types::StamperWithKeyManagement;
 use std::collections::HashMap;

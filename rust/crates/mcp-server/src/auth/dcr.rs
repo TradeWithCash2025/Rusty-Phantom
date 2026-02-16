@@ -58,7 +58,10 @@ impl DCRClient {
         let payload = DCRRegistrationRequest {
             client_name: client_name.clone(),
             redirect_uris: vec![redirect_uri.to_string()],
-            grant_types: vec!["authorization_code".to_string(), "refresh_token".to_string()],
+            grant_types: vec![
+                "authorization_code".to_string(),
+                "refresh_token".to_string(),
+            ],
             response_types: vec!["code".to_string()],
             application_type: "native".to_string(),
             token_endpoint_auth_method: "client_secret_basic".to_string(),
@@ -83,8 +86,10 @@ impl DCRClient {
 
         let dcr_response: DCRRegistrationResponse = response.json().await?;
 
-        self.logger
-            .info(&format!("Successfully registered client: {}", dcr_response.client_id));
+        self.logger.info(&format!(
+            "Successfully registered client: {}",
+            dcr_response.client_id
+        ));
 
         Ok(DCRClientConfig {
             client_id: dcr_response.client_id,

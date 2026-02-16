@@ -11,18 +11,17 @@ pub fn create_siwe_message(data: &EthereumSignInData) -> Result<String, String> 
     // Validate required fields
     let address_re = Regex::new(r"^0x[a-fA-F0-9]{40}$").unwrap();
     if !address_re.is_match(&data.address) {
-        return Err(
-            "address must be a hex value of 20 bytes (40 hex characters).".to_string(),
-        );
+        return Err("address must be a hex value of 20 bytes (40 hex characters).".to_string());
     }
 
     if data.chain_id != (data.chain_id as f64).floor() as i64 {
         return Err("chainId must be a EIP-155 chain ID.".to_string());
     }
 
-    let domain_re =
-        Regex::new(r"^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(:[0-9]{1,5})?$")
-            .unwrap();
+    let domain_re = Regex::new(
+        r"^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(:[0-9]{1,5})?$",
+    )
+    .unwrap();
     let ip_re = Regex::new(
         r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(:[0-9]{1,5})?$",
     ).unwrap();
@@ -183,14 +182,29 @@ pub fn is_uri(value: &str) -> bool {
 }
 
 /// Split a URI into its components per RFC 3986.
-fn split_uri(value: &str) -> Option<(String, Option<String>, String, Option<String>, Option<String>)> {
+#[allow(clippy::type_complexity)]
+fn split_uri(
+    value: &str,
+) -> Option<(
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+)> {
     let re =
         Regex::new(r"(?:([^:/?#]+):)?(?://([^/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#(.*))?").unwrap();
     let caps = re.captures(value)?;
 
-    let scheme = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+    let scheme = caps
+        .get(1)
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default();
     let authority = caps.get(2).map(|m| m.as_str().to_string());
-    let path = caps.get(3).map(|m| m.as_str().to_string()).unwrap_or_default();
+    let path = caps
+        .get(3)
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default();
     let query = caps.get(4).map(|m| m.as_str().to_string());
     let fragment = caps.get(5).map(|m| m.as_str().to_string());
 

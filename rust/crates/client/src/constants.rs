@@ -91,11 +91,7 @@ pub struct ClientNetworkConfig {
 /// Extracts the chain name from the network ID and returns the appropriate
 /// derivation path for the given account index.
 pub fn get_derivation_path_for_network(network_id: &str, account_index: u32) -> String {
-    let network = network_id
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let network = network_id.split(':').next().unwrap_or("").to_lowercase();
 
     match network.as_str() {
         "solana" => DerivationPath::solana(account_index),
@@ -125,11 +121,7 @@ pub fn get_client_network_config(
     network_id: &str,
     account_index: u32,
 ) -> Option<ClientNetworkConfig> {
-    let network = network_id
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let network = network_id.split(':').next().unwrap_or("").to_lowercase();
 
     match network.as_str() {
         "solana" => Some(ClientNetworkConfig {

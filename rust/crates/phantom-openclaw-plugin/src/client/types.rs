@@ -15,6 +15,7 @@ pub struct ToolDefinition {
     pub name: String,
     pub description: String,
     pub parameters: Value,
+    #[allow(clippy::type_complexity)]
     pub execute: Box<
         dyn Fn(
                 String,

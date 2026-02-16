@@ -66,6 +66,7 @@ impl PhantomClient {
     }
 
     /// Set the organization ID.
+    #[allow(clippy::result_large_err)]
     pub fn set_organization_id(&mut self, organization_id: String) -> Result<(), ClientError> {
         if organization_id.is_empty() {
             return Err(ClientError::Config(
@@ -100,11 +101,9 @@ impl PhantomClient {
         &self,
         wallet_name: Option<&str>,
     ) -> Result<CreateWalletResult, ClientError> {
-        let org_id = self
-            .config
-            .organization_id
-            .as_ref()
-            .ok_or_else(|| ClientError::Config("organizationId is required to create a wallet".to_string()))?;
+        let org_id = self.config.organization_id.as_ref().ok_or_else(|| {
+            ClientError::Config("organizationId is required to create a wallet".to_string())
+        })?;
 
         let timestamp = get_secure_timestamp().await;
 
@@ -162,10 +161,7 @@ impl PhantomClient {
                             .as_str()
                             .unwrap_or_default()
                             .to_string(),
-                        address: account["address"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_string(),
+                        address: account["address"].as_str().unwrap_or_default().to_string(),
                     })
                     .collect()
             })
@@ -217,16 +213,14 @@ impl PhantomClient {
         let org_id = self.config.organization_id.as_deref();
         let account_index = derivation_index.unwrap_or(0);
 
-        let paths: Vec<String> = derivation_paths
-            .map(|p| p.to_vec())
-            .unwrap_or_else(|| {
-                vec![
-                    DerivationPath::solana(account_index),
-                    DerivationPath::ethereum(account_index),
-                    DerivationPath::bitcoin(account_index),
-                    DerivationPath::sui(account_index),
-                ]
-            });
+        let paths: Vec<String> = derivation_paths.map(|p| p.to_vec()).unwrap_or_else(|| {
+            vec![
+                DerivationPath::solana(account_index),
+                DerivationPath::ethereum(account_index),
+                DerivationPath::bitcoin(account_index),
+                DerivationPath::sui(account_index),
+            ]
+        });
 
         let request = serde_json::json!({
             "method": "getAccounts",
@@ -248,10 +242,7 @@ impl PhantomClient {
                             .as_str()
                             .unwrap_or_default()
                             .to_string(),
-                        address: account["address"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_string(),
+                        address: account["address"].as_str().unwrap_or_default().to_string(),
                     })
                     .collect()
             })
@@ -265,11 +256,9 @@ impl PhantomClient {
         &self,
         params: &SignMessageParams,
     ) -> Result<String, ClientError> {
-        let org_id = self
-            .config
-            .organization_id
-            .as_ref()
-            .ok_or_else(|| ClientError::Config("organizationId is required to sign a message".to_string()))?;
+        let org_id = self.config.organization_id.as_ref().ok_or_else(|| {
+            ClientError::Config("organizationId is required to sign a message".to_string())
+        })?;
 
         let derivation_index = params.derivation_index.unwrap_or(0);
         let network_config = get_client_network_config(&params.network_id, derivation_index)
@@ -302,11 +291,9 @@ impl PhantomClient {
         &self,
         params: &SignMessageParams,
     ) -> Result<String, ClientError> {
-        let org_id = self
-            .config
-            .organization_id
-            .as_ref()
-            .ok_or_else(|| ClientError::Config("organizationId is required to sign a message".to_string()))?;
+        let org_id = self.config.organization_id.as_ref().ok_or_else(|| {
+            ClientError::Config("organizationId is required to sign a message".to_string())
+        })?;
 
         let derivation_index = params.derivation_index.unwrap_or(0);
         let network_config = get_client_network_config(&params.network_id, derivation_index)
@@ -340,11 +327,9 @@ impl PhantomClient {
         &self,
         params: &SignTypedDataParams,
     ) -> Result<String, ClientError> {
-        let org_id = self
-            .config
-            .organization_id
-            .as_ref()
-            .ok_or_else(|| ClientError::Config("organizationId is required to sign typed data".to_string()))?;
+        let org_id = self.config.organization_id.as_ref().ok_or_else(|| {
+            ClientError::Config("organizationId is required to sign typed data".to_string())
+        })?;
 
         let derivation_index = params.derivation_index.unwrap_or(0);
         let network_config = get_client_network_config(&params.network_id, derivation_index)
@@ -455,9 +440,15 @@ impl PhantomClient {
             }
             for auth in &user.authenticators {
                 let auth_name = match auth {
-                    AuthenticatorConfig::Keypair { authenticator_name, .. }
-                    | AuthenticatorConfig::Passkey { authenticator_name, .. }
-                    | AuthenticatorConfig::Oidc { authenticator_name, .. } => authenticator_name,
+                    AuthenticatorConfig::Keypair {
+                        authenticator_name, ..
+                    }
+                    | AuthenticatorConfig::Passkey {
+                        authenticator_name, ..
+                    }
+                    | AuthenticatorConfig::Oidc {
+                        authenticator_name, ..
+                    } => authenticator_name,
                 };
                 if !auth_name.is_empty() {
                     validate_name_length(auth_name, "Authenticator")?;
@@ -520,9 +511,15 @@ impl PhantomClient {
 
         // Validate the nested authenticator's own name (mirrors TS params.authenticator?.authenticatorName check)
         let nested_auth_name = match &params.authenticator {
-            AuthenticatorConfig::Keypair { authenticator_name, .. }
-            | AuthenticatorConfig::Passkey { authenticator_name, .. }
-            | AuthenticatorConfig::Oidc { authenticator_name, .. } => authenticator_name,
+            AuthenticatorConfig::Keypair {
+                authenticator_name, ..
+            }
+            | AuthenticatorConfig::Passkey {
+                authenticator_name, ..
+            }
+            | AuthenticatorConfig::Oidc {
+                authenticator_name, ..
+            } => authenticator_name,
         };
         if !nested_auth_name.is_empty() {
             validate_name_length(nested_auth_name, "Authenticator")?;
@@ -564,10 +561,7 @@ impl PhantomClient {
     }
 
     /// Grant organization access.
-    pub async fn grant_organization_access(
-        &self,
-        params: &Value,
-    ) -> Result<Value, ClientError> {
+    pub async fn grant_organization_access(&self, params: &Value) -> Result<Value, ClientError> {
         let request = serde_json::json!({
             "method": "grantOrganizationAccess",
             "params": params,
@@ -619,24 +613,19 @@ impl PhantomClient {
         params: &SignTransactionParams,
         include_submission_config: bool,
     ) -> Result<(String, Option<String>), ClientError> {
-        let org_id = self
-            .config
-            .organization_id
-            .as_ref()
-            .ok_or_else(|| {
-                ClientError::Config("organizationId is required to sign a transaction".to_string())
-            })?;
+        let org_id = self.config.organization_id.as_ref().ok_or_else(|| {
+            ClientError::Config("organizationId is required to sign a transaction".to_string())
+        })?;
 
         let derivation_index = params.derivation_index.unwrap_or(0);
         let method_name = self.get_rpc_method_name(&params.network_id, include_submission_config);
 
-        let submission_config = derive_submission_config(&params.network_id)
-            .ok_or_else(|| {
-                ClientError::Config(format!(
-                    "SubmissionConfig could not be derived for network ID: {}",
-                    params.network_id
-                ))
-            })?;
+        let submission_config = derive_submission_config(&params.network_id).ok_or_else(|| {
+            ClientError::Config(format!(
+                "SubmissionConfig could not be derived for network ID: {}",
+                params.network_id
+            ))
+        })?;
 
         let network_config = get_client_network_config(&params.network_id, derivation_index)
             .ok_or_else(|| ClientError::UnsupportedNetwork(params.network_id.clone()))?;
@@ -666,8 +655,8 @@ impl PhantomClient {
         });
 
         if include_submission_config {
-            sign_params["submissionConfig"] = serde_json::to_value(&submission_config)
-                .unwrap_or_default();
+            sign_params["submissionConfig"] =
+                serde_json::to_value(&submission_config).unwrap_or_default();
         }
 
         if include_submission_config {
@@ -754,10 +743,7 @@ impl PhantomClient {
             let prepare_response = self
                 .prepare(
                     encoded_transaction,
-                    self.config
-                        .organization_id
-                        .as_deref()
-                        .unwrap_or_default(),
+                    self.config.organization_id.as_deref().unwrap_or_default(),
                     submission_config,
                     account,
                     authenticator_public_key,
@@ -814,14 +800,19 @@ impl PhantomClient {
                     request = request.header("X-Phantom-Stamp", stamp);
                 }
                 Err(e) => {
-                    return Err(ClientError::Api(format!("Failed to stamp prepare request: {}", e)));
+                    return Err(ClientError::Api(format!(
+                        "Failed to stamp prepare request: {}",
+                        e
+                    )));
                 }
             }
         }
 
-        let response = request.json(&body).send().await.map_err(|e| {
-            ClientError::Api(format!("Prepare request failed: {}", e))
-        })?;
+        let response = request
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ClientError::Api(format!("Prepare request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_body = response
@@ -923,6 +914,7 @@ impl PhantomClient {
 }
 
 /// Validate that a name doesn't exceed the maximum length.
+#[allow(clippy::result_large_err)]
 fn validate_name_length(name: &str, name_type: &str) -> Result<(), ClientError> {
     if name.len() > MAX_NAME_LENGTH {
         return Err(ClientError::Config(format!(

@@ -33,11 +33,7 @@ pub fn parse_sign_message_response(
     network_id: NetworkId,
 ) -> ParsedSignatureResult {
     let network_str = network_id.as_str();
-    let network_prefix = network_str
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let network_prefix = network_str.split(':').next().unwrap_or("").to_lowercase();
 
     match network_prefix.as_str() {
         "solana" => parse_solana_signature_response(base64_response),

@@ -14,6 +14,7 @@ use crate::auth::oauth::OAuthFlow;
 use crate::utils::logger::Logger;
 
 /// Configuration options for SessionManager.
+#[derive(Default)]
 pub struct SessionManagerOptions {
     /// Base URL for OAuth authorization server.
     pub auth_base_url: Option<String>,
@@ -29,20 +30,6 @@ pub struct SessionManagerOptions {
     pub app_id: Option<String>,
     /// Directory to store session data.
     pub session_dir: Option<String>,
-}
-
-impl Default for SessionManagerOptions {
-    fn default() -> Self {
-        Self {
-            auth_base_url: None,
-            connect_base_url: None,
-            api_base_url: None,
-            callback_port: None,
-            callback_path: None,
-            app_id: None,
-            session_dir: None,
-        }
-    }
 }
 
 /// SessionManager handles session lifecycle, auto-authentication, and PhantomClient creation.
@@ -91,9 +78,7 @@ impl SessionManager {
             .or_else(|| std::env::var("PHANTOM_CALLBACK_PATH").ok())
             .unwrap_or_else(|| "/callback".to_string());
 
-        let app_id = options
-            .app_id
-            .unwrap_or_else(|| "phantom-mcp".to_string());
+        let app_id = options.app_id.unwrap_or_else(|| "phantom-mcp".to_string());
 
         let storage = SessionStorage::new(options.session_dir.as_deref());
 
@@ -189,11 +174,11 @@ impl SessionManager {
             updated_at: now,
         });
 
-        self.storage
-            .save(self.session.as_ref().unwrap())
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        self.storage.save(self.session.as_ref().unwrap()).map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
                 format!("Failed to save session: {}", e).into()
-            })?;
+            },
+        )?;
         self.logger.info("Session saved to storage");
 
         self.create_client()?;

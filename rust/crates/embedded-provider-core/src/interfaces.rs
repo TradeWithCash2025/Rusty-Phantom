@@ -57,8 +57,10 @@ pub struct PhantomConnectOptions {
 pub trait AuthProvider: Send + Sync {
     /// Authenticate using the given options.
     /// Returns None if a redirect is in progress.
-    async fn authenticate(&self, options: PhantomConnectOptions)
-        -> Result<Option<AuthResult>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn authenticate(
+        &self,
+        options: PhantomConnectOptions,
+    ) -> Result<Option<AuthResult>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Resume authentication from a redirect (if applicable).
     ///
@@ -173,14 +175,21 @@ pub struct Session {
 #[async_trait::async_trait]
 pub trait EmbeddedStorage: Send + Sync {
     /// Get the current session.
-    async fn get_session(&self) -> Result<Option<Session>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_session(
+        &self,
+    ) -> Result<Option<Session>, Box<dyn std::error::Error + Send + Sync>>;
     /// Save a session.
-    async fn save_session(&self, session: &Session) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn save_session(
+        &self,
+        session: &Session,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     /// Clear the current session.
     async fn clear_session(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Get whether to clear previous OAuth session.
-    async fn get_should_clear_previous_session(&self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_should_clear_previous_session(
+        &self,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
     /// Set whether to clear previous OAuth session.
     async fn set_should_clear_previous_session(
         &self,

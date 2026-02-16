@@ -172,10 +172,12 @@ static CAIP2_NETWORK_MAPPINGS: Lazy<HashMap<&'static str, NetworkMapping>> = Laz
 ///
 /// Returns `None` if the network is not found in the mappings.
 pub fn derive_submission_config(network_id: &str) -> Option<SubmissionConfig> {
-    CAIP2_NETWORK_MAPPINGS.get(network_id).map(|mapping| SubmissionConfig {
-        chain: mapping.chain.to_string(),
-        network: mapping.network.to_string(),
-    })
+    CAIP2_NETWORK_MAPPINGS
+        .get(network_id)
+        .map(|mapping| SubmissionConfig {
+            chain: mapping.chain.to_string(),
+            network: mapping.network.to_string(),
+        })
 }
 
 /// Check if a network ID supports transaction submission.

@@ -23,21 +23,14 @@ impl EthereumEventListeners {
     }
 
     /// Add an event listener. Returns an ID that can be used to remove it.
-    pub fn add_listener(
-        &self,
-        event: EthereumEventType,
-        callback: EthereumEventCallback,
-    ) -> usize {
+    pub fn add_listener(&self, event: EthereumEventType, callback: EthereumEventCallback) -> usize {
         let mut listeners = self.listeners.lock().unwrap();
         let mut next_id = self.next_id.lock().unwrap();
 
         let id = *next_id;
         *next_id += 1;
 
-        listeners
-            .entry(event)
-            .or_insert_with(Vec::new)
-            .push((id, callback));
+        listeners.entry(event).or_default().push((id, callback));
         id
     }
 

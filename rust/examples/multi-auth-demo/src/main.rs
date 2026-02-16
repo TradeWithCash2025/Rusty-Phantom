@@ -26,9 +26,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() {
     println!("Starting Phantom Client Multi-Authenticator Test");
-    println!(
-        "This test demonstrates PhantomClient methods for multi-authenticator organizations"
-    );
+    println!("This test demonstrates PhantomClient methods for multi-authenticator organizations");
     println!("{}", "=".repeat(80));
 
     let api_base_url = std::env::var("API_BASE_URL")
@@ -122,9 +120,7 @@ async fn main() {
         .await
     {
         Ok(organization) => {
-            let org_id = organization["organizationId"]
-                .as_str()
-                .unwrap_or("unknown");
+            let org_id = organization["organizationId"].as_str().unwrap_or("unknown");
             let org_name = organization["organizationName"]
                 .as_str()
                 .unwrap_or("unknown");
@@ -309,7 +305,9 @@ async fn main() {
     println!("  createAuthenticator - Tested additional authenticator creation");
     println!("  deleteAuthenticator - Tested authenticator deletion");
     println!("  Multi-auth access - Both authenticators accessed same organization");
-    println!("  OIDC support - AuthenticatorConfig supports OIDC with jwks_url and id_token_claims");
+    println!(
+        "  OIDC support - AuthenticatorConfig supports OIDC with jwks_url and id_token_claims"
+    );
 
     println!("\nDemo completed.");
 }

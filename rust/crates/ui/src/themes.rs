@@ -53,14 +53,35 @@ pub struct PhantomThemeOverride {
 /// Each `Some` field in the override replaces the corresponding base field.
 fn apply_overrides(base: &PhantomTheme, overrides: &PhantomThemeOverride) -> PhantomTheme {
     PhantomTheme {
-        background: overrides.background.clone().unwrap_or_else(|| base.background.clone()),
-        secondary: overrides.secondary.clone().unwrap_or_else(|| base.secondary.clone()),
-        error: overrides.error.clone().unwrap_or_else(|| base.error.clone()),
-        success: overrides.success.clone().unwrap_or_else(|| base.success.clone()),
+        background: overrides
+            .background
+            .clone()
+            .unwrap_or_else(|| base.background.clone()),
+        secondary: overrides
+            .secondary
+            .clone()
+            .unwrap_or_else(|| base.secondary.clone()),
+        error: overrides
+            .error
+            .clone()
+            .unwrap_or_else(|| base.error.clone()),
+        success: overrides
+            .success
+            .clone()
+            .unwrap_or_else(|| base.success.clone()),
         text: overrides.text.clone().unwrap_or_else(|| base.text.clone()),
-        overlay: overrides.overlay.clone().unwrap_or_else(|| base.overlay.clone()),
-        border_radius: overrides.border_radius.clone().unwrap_or_else(|| base.border_radius.clone()),
-        brand: overrides.brand.clone().unwrap_or_else(|| base.brand.clone()),
+        overlay: overrides
+            .overlay
+            .clone()
+            .unwrap_or_else(|| base.overlay.clone()),
+        border_radius: overrides
+            .border_radius
+            .clone()
+            .unwrap_or_else(|| base.border_radius.clone()),
+        brand: overrides
+            .brand
+            .clone()
+            .unwrap_or_else(|| base.brand.clone()),
     }
 }
 
@@ -191,9 +212,7 @@ pub fn merge_theme(custom: Option<&PhantomTheme>) -> Result<ComputedPhantomWebTh
     };
 
     if !merged.secondary.starts_with('#') {
-        return Err(
-            "Secondary color must be a hex color to derive auxiliary color.".to_string(),
-        );
+        return Err("Secondary color must be a hex color to derive auxiliary color.".to_string());
     }
 
     let aux = hex_to_rgba(&merged.secondary, 0.1)?;
@@ -221,9 +240,7 @@ pub fn merge_theme_with_overrides(
     };
 
     if !merged.secondary.starts_with('#') {
-        return Err(
-            "Secondary color must be a hex color to derive auxiliary color.".to_string(),
-        );
+        return Err("Secondary color must be a hex color to derive auxiliary color.".to_string());
     }
 
     let aux = hex_to_rgba(&merged.secondary, 0.1)?;
@@ -292,9 +309,7 @@ pub fn merge_theme_native(
     };
 
     if !merged.secondary.starts_with('#') {
-        return Err(
-            "Secondary color must be a hex color to derive auxiliary color.".to_string(),
-        );
+        return Err("Secondary color must be a hex color to derive auxiliary color.".to_string());
     }
 
     let aux = hex_to_rgba(&merged.secondary, 0.1)?;
@@ -322,9 +337,7 @@ pub fn merge_theme_native_with_overrides(
     };
 
     if !merged.secondary.starts_with('#') {
-        return Err(
-            "Secondary color must be a hex color to derive auxiliary color.".to_string(),
-        );
+        return Err("Secondary color must be a hex color to derive auxiliary color.".to_string());
     }
 
     let aux = hex_to_rgba(&merged.secondary, 0.1)?;

@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use phantom_chain_interfaces::{
     EthTransactionRequest, EthereumChain, SolanaChain, SolanaConnectOptions, SolanaConnectResult,
-    SolanaNetwork, SolanaSignMessageResult, SolanaSendAllTransactionsResult,
-    SolanaSendTransactionResult,
+    SolanaNetwork, SolanaSendAllTransactionsResult, SolanaSendTransactionResult,
+    SolanaSignMessageResult,
 };
 use phantom_constants::{chain_id_to_network_id, network_id_to_chain_id, NetworkId};
 
@@ -28,6 +28,7 @@ use crate::embedded_provider::EmbeddedProvider;
 /// Each listener receives a [`serde_json::Value`] payload and is identified by
 /// a monotonically increasing `u64` ID that can be used for removal.
 struct EventListenerRegistry {
+    #[allow(clippy::type_complexity)]
     listeners: Mutex<HashMap<String, Vec<(u64, Arc<dyn Fn(serde_json::Value) + Send + Sync>)>>>,
     next_id: AtomicU64,
 }
@@ -45,7 +46,7 @@ impl EventListenerRegistry {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut map = self.listeners.lock().unwrap();
         map.entry(event.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((id, Arc::from(listener)));
         id
     }
@@ -216,12 +217,8 @@ impl EthereumChain for EmbeddedEthereumChain {
                 if params_slice.len() < 2 {
                     return Err("personal_sign requires [message, address]".into());
                 }
-                let message = params_slice[0]
-                    .as_str()
-                    .ok_or("message must be a string")?;
-                let address = params_slice[1]
-                    .as_str()
-                    .ok_or("address must be a string")?;
+                let message = params_slice[0].as_str().ok_or("message must be a string")?;
+                let address = params_slice[1].as_str().ok_or("address must be a string")?;
                 let sig = self.sign_personal_message(message, address).await?;
                 Ok(serde_json::Value::String(sig))
             }
@@ -229,9 +226,7 @@ impl EthereumChain for EmbeddedEthereumChain {
                 if params_slice.len() < 2 {
                     return Err("eth_signTypedData_v4 requires [address, typedData]".into());
                 }
-                let address = params_slice[0]
-                    .as_str()
-                    .ok_or("address must be a string")?;
+                let address = params_slice[0].as_str().ok_or("address must be a string")?;
                 let typed_data = if let Some(s) = params_slice[1].as_str() {
                     serde_json::from_str(s)?
                 } else {
@@ -293,10 +288,8 @@ impl EthereumChain for EmbeddedEthereumChain {
         *self.accounts.lock().unwrap() = eth_addresses.clone();
 
         let chain_id_str = self.chain_id_cache.lock().unwrap().clone();
-        self.events.emit(
-            "connect",
-            serde_json::json!({ "chainId": chain_id_str }),
-        );
+        self.events
+            .emit("connect", serde_json::json!({ "chainId": chain_id_str }));
         self.events.emit(
             "accountsChanged",
             serde_json::to_value(&eth_addresses).unwrap_or_default(),
@@ -312,10 +305,7 @@ impl EthereumChain for EmbeddedEthereumChain {
             "disconnect",
             serde_json::json!({ "code": 4900, "message": "Provider disconnected" }),
         );
-        self.events.emit(
-            "accountsChanged",
-            serde_json::json!([]),
-        );
+        self.events.emit("accountsChanged", serde_json::json!([]));
         Ok(())
     }
 
@@ -420,10 +410,8 @@ impl EthereumChain for EmbeddedEthereumChain {
         self.refresh_chain_id_cache();
 
         let hex_chain_id = format!("0x{:x}", numeric);
-        self.events.emit(
-            "chainChanged",
-            serde_json::Value::String(hex_chain_id),
-        );
+        self.events
+            .emit("chainChanged", serde_json::Value::String(hex_chain_id));
 
         Ok(())
     }
@@ -555,6 +543,10 @@ impl SolanaChain for EmbeddedSolanaChain {
         Ok(())
     }
 
+    async fn get_account(&self) -> Option<String> {
+        self.public_key.lock().unwrap().clone()
+    }
+
     async fn sign_message(
         &self,
         message: &[u8],
@@ -578,12 +570,7 @@ impl SolanaChain for EmbeddedSolanaChain {
             .into_vec()
             .unwrap_or_else(|_| result.signature.as_bytes().to_vec());
 
-        let pk = self
-            .public_key
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_default();
+        let pk = self.public_key.lock().unwrap().clone().unwrap_or_default();
 
         Ok(SolanaSignMessageResult {
             signature: sig_bytes,
@@ -630,9 +617,7 @@ impl SolanaChain for EmbeddedSolanaChain {
             })
             .await?;
 
-        let sig = result
-            .hash
-            .ok_or("Transaction not submitted")?;
+        let sig = result.hash.ok_or("Transaction not submitted")?;
 
         Ok(SolanaSendTransactionResult { signature: sig })
     }

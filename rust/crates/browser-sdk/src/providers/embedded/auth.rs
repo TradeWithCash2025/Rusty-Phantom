@@ -12,10 +12,10 @@
 //! - A direct auth result callback for environments that can complete auth
 //!   in-band (e.g., tests, server-side flows).
 
+use phantom_constants::DEFAULT_AUTHENTICATOR_ALGORITHM;
 use phantom_embedded_provider_core::{
     AuthProvider, AuthResult, EmbeddedProviderAuthType, PhantomConnectOptions, UrlParamsAccessor,
 };
-use phantom_constants::DEFAULT_AUTHENTICATOR_ALGORITHM;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -33,9 +33,8 @@ const SDK_PLATFORM: &str = "rust-native";
 /// The implementation should present this URL to the user (e.g., open a browser
 /// window, display a QR code, etc.). The callback returns `Ok(())` if the
 /// redirect was initiated successfully.
-pub type AuthRedirectHandler = Box<
-    dyn Fn(String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
->;
+pub type AuthRedirectHandler =
+    Box<dyn Fn(String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + Sync>;
 
 /// Configuration for the browser auth provider.
 pub struct BrowserAuthConfig {
@@ -176,9 +175,7 @@ impl BrowserAuthProvider {
             .unwrap_or("");
 
         // Resolve the provider, defaulting to Google if not specified.
-        let provider = options
-            .provider
-            .unwrap_or(EmbeddedProviderAuthType::Google);
+        let provider = options.provider.unwrap_or(EmbeddedProviderAuthType::Google);
 
         let provider_str = match provider {
             EmbeddedProviderAuthType::Google => "google",
@@ -188,9 +185,7 @@ impl BrowserAuthProvider {
         };
 
         // Resolve the algorithm, defaulting to DEFAULT_AUTHENTICATOR_ALGORITHM.
-        let algorithm = options
-            .algorithm
-            .unwrap_or(DEFAULT_AUTHENTICATOR_ALGORITHM);
+        let algorithm = options.algorithm.unwrap_or(DEFAULT_AUTHENTICATOR_ALGORITHM);
         let algorithm_str = match algorithm {
             phantom_constants::Algorithm::Ed25519 => "ed25519",
             phantom_constants::Algorithm::Secp256r1 => "secp256r1",
@@ -267,9 +262,7 @@ impl AuthProvider for BrowserAuthProvider {
         }
 
         // Resolve the provider, defaulting to Google if not specified.
-        let provider = options
-            .provider
-            .unwrap_or(EmbeddedProviderAuthType::Google);
+        let provider = options.provider.unwrap_or(EmbeddedProviderAuthType::Google);
 
         // For device auth, the result comes back immediately (no redirect).
         // The embedded provider handles device auth flow separately.
@@ -362,9 +355,7 @@ impl AuthProvider for BrowserAuthProvider {
 
         // Handle error responses from the auth server.
         if let Some(ref error_code) = error {
-            let error_msg = error_description
-                .as_deref()
-                .unwrap_or(error_code.as_str());
+            let error_msg = error_description.as_deref().unwrap_or(error_code.as_str());
 
             // Clean up pending auth state on error.
             if let Some(ref sid) = session_id {

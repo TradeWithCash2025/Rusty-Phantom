@@ -87,7 +87,10 @@ mod tests {
     fn random_string_alphanumeric() {
         let s = random_string(100);
         for c in s.chars() {
-            assert!(c.is_ascii_alphanumeric(), "expected alphanumeric, got '{c}'");
+            assert!(
+                c.is_ascii_alphanumeric(),
+                "expected alphanumeric, got '{c}'"
+            );
         }
     }
 

@@ -12,10 +12,14 @@ pub mod types;
 pub mod utils;
 
 // Re-export main types
+pub use constants::{
+    AUTHENTICATOR_EXPIRATION_TIME_MS, AUTHENTICATOR_RENEWAL_WINDOW_MS, EMBEDDED_PROVIDER_AUTH_TYPES,
+};
+pub use embedded_chains::{EmbeddedEthereumChain, EmbeddedSolanaChain};
 pub use embedded_provider::{EmbeddedProvider, EmbeddedProviderEvent, EventCallback};
 pub use interfaces::{
-    AuthProvider, AuthResult, DebugLogger, EmbeddedStorage, Keypair, PlatformAdapter,
-    PhantomAppAuthOptions, PhantomAppProvider, PhantomConnectOptions, Session, SessionStatus,
+    AuthProvider, AuthResult, DebugLogger, EmbeddedStorage, Keypair, PhantomAppAuthOptions,
+    PhantomAppProvider, PhantomConnectOptions, PlatformAdapter, Session, SessionStatus,
     StamperInfo, UrlParamsAccessor,
 };
 pub use types::{
@@ -24,9 +28,4 @@ pub use types::{
     EmbeddedProviderConfig, SignAndSendTransactionParams, SignMessageParams, SignMessageResult,
     SignTransactionParams, SignTypedDataV4Params, SignedTransaction, WalletAddress,
 };
-pub use embedded_chains::{EmbeddedEthereumChain, EmbeddedSolanaChain};
 pub use utils::{generate_session_id, retry_with_backoff};
-pub use constants::{
-    AUTHENTICATOR_EXPIRATION_TIME_MS, AUTHENTICATOR_RENEWAL_WINDOW_MS,
-    EMBEDDED_PROVIDER_AUTH_TYPES,
-};

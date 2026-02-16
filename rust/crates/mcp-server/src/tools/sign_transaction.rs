@@ -81,11 +81,7 @@ async fn handle_sign_transaction(
 
     let mut account = match params.get("account") {
         Some(serde_json::Value::Null) | None => None,
-        Some(v) => Some(
-            v.as_str()
-                .ok_or("account must be a string")?
-                .to_string(),
-        ),
+        Some(v) => Some(v.as_str().ok_or("account must be a string")?.to_string()),
     };
 
     if account.is_none() && is_solana_chain(&network_id) {

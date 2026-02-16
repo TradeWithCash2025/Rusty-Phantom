@@ -150,13 +150,9 @@ async fn get_signature_status(
         .and_then(|v| v.as_array())
         .ok_or("Failed to parse signature statuses")?;
 
-    Ok(statuses.first().and_then(|v| {
-        if v.is_null() {
-            None
-        } else {
-            Some(v.clone())
-        }
-    }))
+    Ok(statuses
+        .first()
+        .and_then(|v| if v.is_null() { None } else { Some(v.clone()) }))
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +166,11 @@ const SYSTEM_PROGRAM_ID: [u8; 32] = [0u8; 32];
 fn decode_pubkey(s: &str) -> Result<[u8; 32], Box<dyn std::error::Error>> {
     let bytes = bs58::decode(s).into_vec()?;
     if bytes.len() != 32 {
-        return Err(format!("Invalid public key length: expected 32, got {}", bytes.len()).into());
+        return Err(format!(
+            "Invalid public key length: expected 32, got {}",
+            bytes.len()
+        )
+        .into());
     }
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
@@ -209,11 +209,7 @@ struct SolAccountMeta {
 }
 
 /// Build a SystemProgram::Transfer instruction.
-fn system_transfer_instruction(
-    from: &[u8; 32],
-    to: &[u8; 32],
-    lamports: u64,
-) -> SolInstruction {
+fn system_transfer_instruction(from: &[u8; 32], to: &[u8; 32], lamports: u64) -> SolInstruction {
     // SystemProgram Transfer instruction index = 2 (little-endian u32)
     let mut data = Vec::with_capacity(12);
     data.extend_from_slice(&2u32.to_le_bytes());
@@ -309,14 +305,8 @@ fn serialize_transaction(
     accounts.insert(0, fee_payer_entry);
 
     let num_required_signatures = accounts.iter().filter(|(_, s, _)| *s).count() as u8;
-    let num_readonly_signed = accounts
-        .iter()
-        .filter(|(_, s, w)| *s && !*w)
-        .count() as u8;
-    let num_readonly_unsigned = accounts
-        .iter()
-        .filter(|(_, s, w)| !*s && !*w)
-        .count() as u8;
+    let num_readonly_signed = accounts.iter().filter(|(_, s, w)| *s && !*w).count() as u8;
+    let num_readonly_unsigned = accounts.iter().filter(|(_, s, w)| !*s && !*w).count() as u8;
 
     // 3. Build the message.
     let mut message = Vec::new();
@@ -469,7 +459,7 @@ async fn main() {
 
     // Step 3: Sign a message
     println!("\n3. Signing a message...");
-    let network_id_str = serde_json::to_value(&network_id)
+    let network_id_str = serde_json::to_value(network_id)
         .ok()
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .unwrap_or_else(|| network_id.as_str().to_string());
@@ -537,7 +527,7 @@ async fn main() {
                 break;
             }
 
-            if check_count % 12 == 0 {
+            if check_count.is_multiple_of(12) {
                 println!("   Still waiting... (checked {} times)", check_count);
             } else {
                 eprint!(".");
@@ -551,7 +541,10 @@ async fn main() {
     let lamports = (transfer_amount_sol * LAMPORTS_PER_SOL) as u64;
     let priority_fee_micro_lamports = 1000_u64;
 
-    println!("   Amount: {} SOL ({} lamports)", transfer_amount_sol, lamports);
+    println!(
+        "   Amount: {} SOL ({} lamports)",
+        transfer_amount_sol, lamports
+    );
     println!("   From/To: {}", sol_addr);
     println!(
         "   Priority fee: {} micro-lamports per compute unit",
@@ -615,7 +608,10 @@ async fn main() {
     if let Some(ref hash) = signed_result.hash {
         println!("   Transaction Hash: {}", hash);
     }
-    println!("   Raw transaction (base64url): {}", signed_result.raw_transaction);
+    println!(
+        "   Raw transaction (base64url): {}",
+        signed_result.raw_transaction
+    );
 
     let signature = match &signed_result.hash {
         Some(h) => h.clone(),
@@ -683,7 +679,10 @@ async fn main() {
         println!("\n   Transaction confirmation timeout. Check manually:");
         println!("   {}", explorer_url(&signature, &network));
     } else {
-        println!("\n   View on Explorer: {}", explorer_url(&signature, &network));
+        println!(
+            "\n   View on Explorer: {}",
+            explorer_url(&signature, &network)
+        );
     }
 
     // Step 8: Final balance check

@@ -24,10 +24,7 @@ pub async fn connect(
     // First try eager connecting
     if let Ok(Some(accounts)) = strategy.connect(true).await {
         if !accounts.is_empty() {
-            events.trigger_event(
-                EthereumEventType::Connect,
-                serde_json::to_value(&accounts)?,
-            );
+            events.trigger_event(EthereumEventType::Connect, serde_json::to_value(&accounts)?);
             return Ok(accounts);
         }
     }
@@ -40,10 +37,7 @@ pub async fn connect(
     // Prompt user to connect
     if let Ok(Some(accounts)) = strategy.connect(false).await {
         if !accounts.is_empty() {
-            events.trigger_event(
-                EthereumEventType::Connect,
-                serde_json::to_value(&accounts)?,
-            );
+            events.trigger_event(EthereumEventType::Connect, serde_json::to_value(&accounts)?);
             return Ok(accounts);
         }
     }
@@ -57,10 +51,7 @@ pub async fn disconnect(
     events: &EthereumEventListeners,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     strategy.disconnect().await?;
-    events.trigger_event(
-        EthereumEventType::Disconnect,
-        serde_json::json!([]),
-    );
+    events.trigger_event(EthereumEventType::Disconnect, serde_json::json!([]));
     Ok(())
 }
 

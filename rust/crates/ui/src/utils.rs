@@ -15,12 +15,12 @@ pub fn hex_to_rgba(hex: &str, opacity: f64) -> Result<String, String> {
         return Err(format!("Invalid hex color: {hex}"));
     }
 
-    let r = u8::from_str_radix(&clean[0..2], 16)
-        .map_err(|_| format!("Invalid hex color: {hex}"))?;
-    let g = u8::from_str_radix(&clean[2..4], 16)
-        .map_err(|_| format!("Invalid hex color: {hex}"))?;
-    let b = u8::from_str_radix(&clean[4..6], 16)
-        .map_err(|_| format!("Invalid hex color: {hex}"))?;
+    let r =
+        u8::from_str_radix(&clean[0..2], 16).map_err(|_| format!("Invalid hex color: {hex}"))?;
+    let g =
+        u8::from_str_radix(&clean[2..4], 16).map_err(|_| format!("Invalid hex color: {hex}"))?;
+    let b =
+        u8::from_str_radix(&clean[4..6], 16).map_err(|_| format!("Invalid hex color: {hex}"))?;
 
     Ok(format!("rgba({r}, {g}, {b}, {opacity})"))
 }

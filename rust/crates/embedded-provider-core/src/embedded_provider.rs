@@ -5,11 +5,11 @@
 
 use phantom_base64url::string_to_base64url;
 use phantom_client::{AddressFormat, PhantomClient, PhantomClientConfig};
-use phantom_sdk_types::StamperWithKeyManagement;
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
     ParsedTransactionResult,
 };
+use phantom_sdk_types::StamperWithKeyManagement;
 use phantom_utils::network::get_chain_prefix;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,11 +61,7 @@ impl EmbeddedProvider {
         platform: Arc<dyn PlatformAdapter>,
         logger: Arc<dyn DebugLogger>,
     ) -> Result<Self, String> {
-        logger.log(
-            "EMBEDDED_PROVIDER",
-            "Initializing EmbeddedProvider",
-            None,
-        );
+        logger.log("EMBEDDED_PROVIDER", "Initializing EmbeddedProvider", None);
 
         if config.embedded_wallet_type == "app-wallet" {
             return Err(
@@ -400,8 +396,11 @@ impl EmbeddedProvider {
         *self.wallet_id.write().await = None;
         *self.addresses.write().await = Vec::new();
 
-        self.logger
-            .info("EMBEDDED_PROVIDER", "Disconnected from embedded wallet", None);
+        self.logger.info(
+            "EMBEDDED_PROVIDER",
+            "Disconnected from embedded wallet",
+            None,
+        );
 
         if was_connected {
             self.emit(
@@ -420,9 +419,7 @@ impl EmbeddedProvider {
         params: &SignMessageParams,
     ) -> Result<ParsedSignatureResult, Box<dyn std::error::Error + Send + Sync>> {
         let client = self.client.read().await;
-        let client = client
-            .as_ref()
-            .ok_or("Not connected")?;
+        let client = client.as_ref().ok_or("Not connected")?;
 
         let wallet_id = self.wallet_id.read().await;
         let wallet_id = wallet_id.as_ref().ok_or("Not connected")?;
@@ -670,7 +667,7 @@ impl EmbeddedProvider {
         {
             let hex_payload = &params.message[2..];
             // Ensure even-length hex string
-            let padded = if hex_payload.len() % 2 != 0 {
+            let padded = if !hex_payload.len().is_multiple_of(2) {
                 format!("0{}", hex_payload)
             } else {
                 hex_payload.to_string()
@@ -738,11 +735,7 @@ impl EmbeddedProvider {
             return Err("Invalid session - missing authenticator timing".into());
         }
 
-        let time_until_expiry = if session.authenticator_expires_at > now {
-            session.authenticator_expires_at - now
-        } else {
-            0
-        };
+        let time_until_expiry = session.authenticator_expires_at.saturating_sub(now);
 
         self.logger.log(
             "EMBEDDED_PROVIDER",
@@ -772,9 +765,7 @@ impl EmbeddedProvider {
     /// Reads the session from storage and validates it. Returns `None` and
     /// clears storage if the session is invalid (not completed, missing
     /// wallet_id/organization_id, or expired authenticator).
-    pub async fn validate_and_clean_session(
-        &self,
-    ) -> Option<Session> {
+    pub async fn validate_and_clean_session(&self) -> Option<Session> {
         let session = match self.platform.storage().get_session().await {
             Ok(Some(s)) => s,
             _ => return None,
@@ -890,13 +881,15 @@ impl EmbeddedProvider {
         &self,
         is_auto_connect: bool,
     ) -> Result<Option<ConnectResult>, Box<dyn std::error::Error + Send + Sync>> {
-        self.logger.log("EMBEDDED_PROVIDER", "Getting existing session", None);
+        self.logger
+            .log("EMBEDDED_PROVIDER", "Getting existing session", None);
 
         let storage = self.platform.storage();
         let session = match self.validate_and_clean_session().await {
             Some(s) => s,
             None => {
-                self.logger.log("EMBEDDED_PROVIDER", "No existing session found", None);
+                self.logger
+                    .log("EMBEDDED_PROVIDER", "No existing session found", None);
                 return Ok(None);
             }
         };
@@ -1297,10 +1290,7 @@ impl EmbeddedProvider {
             stamper.init().await?;
         }
 
-        let mut headers = self
-            .platform
-            .analytics_headers()
-            .unwrap_or_default();
+        let mut headers = self.platform.analytics_headers().unwrap_or_default();
 
         if let Some(ref user_id) = session.auth_user_id {
             headers.insert("x-auth-user-id".to_string(), user_id.clone());
@@ -1344,17 +1334,15 @@ impl EmbeddedProvider {
                 let filtered: Vec<WalletAddress> = raw_addresses
                     .into_iter()
                     .filter(|addr| {
-                        address_types.iter().any(|t| {
-                            match serde_json::to_value(t) {
-                                Ok(v) => v.as_str().map_or(false, |s| s == addr.address_type),
-                                Err(_) => false,
-                            }
+                        address_types.iter().any(|t| match serde_json::to_value(t) {
+                            Ok(v) => v.as_str().is_some_and(|s| s == addr.address_type),
+                            Err(_) => false,
                         })
                     })
                     .map(|addr| {
-                        let parsed_type = serde_json::from_value(
-                            serde_json::Value::String(addr.address_type.clone()),
-                        )
+                        let parsed_type = serde_json::from_value(serde_json::Value::String(
+                            addr.address_type.clone(),
+                        ))
                         .unwrap_or(crate::constants::AddressFormat::Ethereum);
                         WalletAddress {
                             address_type: parsed_type,

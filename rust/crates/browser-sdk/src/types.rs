@@ -5,9 +5,7 @@ use phantom_browser_injected_sdk::auto_confirm::{
 };
 use phantom_chain_interfaces::{EthereumChain, SolanaChain};
 use phantom_client::constants::AddressFormat;
-use phantom_embedded_provider_core::{
-    EmbeddedProviderAuthType, WalletAddress,
-};
+use phantom_embedded_provider_core::{EmbeddedProviderAuthType, WalletAddress};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -98,8 +96,14 @@ impl std::fmt::Debug for BrowserSdkConfig {
             .field("embedded_wallet_type", &self.embedded_wallet_type)
             .field("auth_options", &self.auth_options)
             .field("address_types", &self.address_types)
-            .field("platform_adapter", &self.platform_adapter.as_ref().map(|_| "..."))
-            .field("embedded_logger", &self.embedded_logger.as_ref().map(|_| "..."))
+            .field(
+                "platform_adapter",
+                &self.platform_adapter.as_ref().map(|_| "..."),
+            )
+            .field(
+                "embedded_logger",
+                &self.embedded_logger.as_ref().map(|_| "..."),
+            )
             .finish()
     }
 }

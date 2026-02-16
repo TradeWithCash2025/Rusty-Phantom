@@ -20,6 +20,7 @@ use phantom_chain_interfaces::{EthTransactionRequest, EthereumChain};
 /// Each listener receives a [`serde_json::Value`] payload and is identified by
 /// a monotonically increasing `u64` ID that can be used for removal.
 struct EventListenerRegistry {
+    #[allow(clippy::type_complexity)]
     listeners: Mutex<HashMap<String, Vec<(u64, Arc<dyn Fn(serde_json::Value) + Send + Sync>)>>>,
     next_id: AtomicU64,
 }
@@ -37,7 +38,7 @@ impl EventListenerRegistry {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut map = self.listeners.lock().unwrap();
         map.entry(event.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((id, Arc::from(listener)));
         id
     }
@@ -465,7 +466,10 @@ impl EthereumChain for InjectedWalletEthereumChain {
             Err(e) => {
                 // Check if the error indicates the method is unsupported.
                 let msg = e.to_string().to_lowercase();
-                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                if msg.contains("unsupported")
+                    || msg.contains("not implemented")
+                    || msg.contains("not supported")
+                {
                     tracing::info!(
                         wallet_id = %self.wallet_id,
                         wallet_name = %self.wallet_name,
@@ -525,7 +529,10 @@ impl EthereumChain for InjectedWalletEthereumChain {
             }
             Err(e) => {
                 let msg = e.to_string().to_lowercase();
-                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                if msg.contains("unsupported")
+                    || msg.contains("not implemented")
+                    || msg.contains("not supported")
+                {
                     tracing::info!(
                         wallet_id = %self.wallet_id,
                         wallet_name = %self.wallet_name,
@@ -535,9 +542,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
                         serde_json::Value::String(address.to_string()),
                         typed_data.clone(),
                     ];
-                    let result = self
-                        .request("eth_signTypedData_v4", Some(&params))
-                        .await?;
+                    let result = self.request("eth_signTypedData_v4", Some(&params)).await?;
                     let sig = result
                         .as_str()
                         .map(|s| s.to_string())
@@ -587,7 +592,10 @@ impl EthereumChain for InjectedWalletEthereumChain {
             }
             Err(e) => {
                 let msg = e.to_string().to_lowercase();
-                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                if msg.contains("unsupported")
+                    || msg.contains("not implemented")
+                    || msg.contains("not supported")
+                {
                     tracing::info!(
                         wallet_id = %self.wallet_id,
                         wallet_name = %self.wallet_name,
@@ -595,9 +603,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
                     );
                     let tx_value = serde_json::to_value(transaction)?;
                     let params = vec![tx_value];
-                    let result = self
-                        .request("eth_signTransaction", Some(&params))
-                        .await?;
+                    let result = self.request("eth_signTransaction", Some(&params)).await?;
                     let sig = result
                         .as_str()
                         .map(|s| s.to_string())
@@ -648,7 +654,10 @@ impl EthereumChain for InjectedWalletEthereumChain {
             }
             Err(e) => {
                 let msg = e.to_string().to_lowercase();
-                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                if msg.contains("unsupported")
+                    || msg.contains("not implemented")
+                    || msg.contains("not supported")
+                {
                     tracing::info!(
                         wallet_id = %self.wallet_id,
                         wallet_name = %self.wallet_name,
@@ -656,9 +665,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
                     );
                     let tx_value = serde_json::to_value(transaction)?;
                     let params = vec![tx_value];
-                    let result = self
-                        .request("eth_sendTransaction", Some(&params))
-                        .await?;
+                    let result = self.request("eth_sendTransaction", Some(&params)).await?;
                     let tx_hash = result
                         .as_str()
                         .map(|s| s.to_string())

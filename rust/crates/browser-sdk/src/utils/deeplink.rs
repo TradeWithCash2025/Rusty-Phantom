@@ -5,7 +5,10 @@
 /// # Arguments
 /// * `current_href` - The URL to open in Phantom (must be HTTP or HTTPS)
 /// * `referrer` - Optional referrer parameter
-pub fn get_deeplink_to_phantom(current_href: &str, referrer: Option<&str>) -> Result<String, String> {
+pub fn get_deeplink_to_phantom(
+    current_href: &str,
+    referrer: Option<&str>,
+) -> Result<String, String> {
     if !current_href.starts_with("http:") && !current_href.starts_with("https:") {
         return Err(
             "Invalid URL protocol - only HTTP/HTTPS URLs are supported for deeplinks".to_string(),

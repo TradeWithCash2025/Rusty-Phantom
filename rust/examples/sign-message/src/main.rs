@@ -207,10 +207,7 @@ async fn main() {
     println!("\nMessage Details:");
     println!("   Message: \"{}\"", cli_args.message);
     println!("   Length: {} characters", cli_args.message.len());
-    println!(
-        "   UTF-8 bytes: {}",
-        cli_args.message.as_bytes().len()
-    );
+    println!("   UTF-8 bytes: {}", cli_args.message.len());
     println!(
         "   Base64url encoded: {}",
         string_to_base64url(&cli_args.message)

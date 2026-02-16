@@ -38,6 +38,7 @@ impl DiscoverySource {
     }
 
     /// Parse from a string, returning `None` for unrecognised values.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "phantom" => Some(DiscoverySource::Phantom),
@@ -107,7 +108,9 @@ impl InjectedWalletInfo {
     ///
     /// Returns `None` when `discovery` is `None` or contains an unrecognised value.
     pub fn discovery_source(&self) -> Option<DiscoverySource> {
-        self.discovery.as_deref().and_then(DiscoverySource::from_str)
+        self.discovery
+            .as_deref()
+            .and_then(DiscoverySource::from_str)
     }
 }
 
@@ -190,11 +193,7 @@ impl InjectedWalletRegistry {
             .lock()
             .unwrap()
             .values()
-            .filter(|w| {
-                w.address_types
-                    .iter()
-                    .any(|t| address_types.contains(t))
-            })
+            .filter(|w| w.address_types.iter().any(|t| address_types.contains(t)))
             .cloned()
             .collect()
     }

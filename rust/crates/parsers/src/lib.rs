@@ -64,11 +64,7 @@ pub fn parse_to_kms_transaction(
     transaction: TransactionInput,
     network_id: &str,
 ) -> Result<ParsedTransaction, ParseError> {
-    let network_prefix = network_id
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let network_prefix = network_id.split(':').next().unwrap_or("").to_lowercase();
 
     match network_prefix.as_str() {
         "solana" => parse_solana_transaction_to_base64url(transaction),
@@ -155,9 +151,7 @@ fn parse_evm_transaction_to_hex(
                 original_format: "base64".to_string(),
             })
         }
-        TransactionInput::JsonObject(obj) => {
-            rlp_encode_evm_transaction(&obj)
-        }
+        TransactionInput::JsonObject(obj) => rlp_encode_evm_transaction(&obj),
     }
 }
 
@@ -165,9 +159,7 @@ fn parse_evm_transaction_to_hex(
 ///
 /// Supports both EIP-1559 (type 2) and legacy transaction formats.
 /// Mirrors the TS behavior of `ethers.Transaction.from(tx).unsignedSerialized`.
-fn rlp_encode_evm_transaction(
-    tx: &serde_json::Value,
-) -> Result<ParsedTransaction, ParseError> {
+fn rlp_encode_evm_transaction(tx: &serde_json::Value) -> Result<ParsedTransaction, ParseError> {
     use rlp::RlpStream;
 
     let get_str = |key: &str| -> Option<String> {
@@ -187,7 +179,7 @@ fn rlp_encode_evm_transaction(
         || get_str("max_fee_per_gas").is_some()
         || get_str("type")
             .as_deref()
-            .map_or(false, |t| t == "0x2" || t == "2");
+            .is_some_and(|t| t == "0x2" || t == "2");
 
     // Get gas limit: check gasLimit, gas, then default for simple transfers
     let gas_limit = get_str("gasLimit")
@@ -195,10 +187,7 @@ fn rlp_encode_evm_transaction(
         .or_else(|| get_str("gas"))
         .unwrap_or_else(|| {
             // Default for simple transfers
-            if get_str("to").is_some()
-                && get_str("value").is_some()
-                && get_str("data").is_none()
-            {
+            if get_str("to").is_some() && get_str("value").is_some() && get_str("data").is_none() {
                 "0x5208".to_string() // 21000
             } else {
                 "0x0".to_string()

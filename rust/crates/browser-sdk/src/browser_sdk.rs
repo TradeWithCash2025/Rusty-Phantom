@@ -13,7 +13,7 @@ use phantom_embedded_provider_core::WalletAddress;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::debug::{debug, DebugCategory, DebugCallback, DebugLevel};
+use crate::debug::{debug, DebugCallback, DebugCategory, DebugLevel};
 use crate::provider_manager::{ProviderManager, ProviderPreference, SwitchProviderOptions};
 use crate::types::{AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider};
 use crate::wallets::{InjectedWalletInfo, InjectedWalletRegistry};
@@ -147,19 +147,11 @@ impl BrowserSdk {
         &self,
         options: &AuthOptions,
     ) -> Result<ConnectResult, Box<dyn std::error::Error + Send + Sync>> {
-        debug().info(
-            DebugCategory::BROWSER_SDK,
-            "Starting connection",
-            None,
-        );
+        debug().info(DebugCategory::BROWSER_SDK, "Starting connection", None);
 
         match self.provider_manager.connect(options).await {
             Ok(result) => {
-                debug().info(
-                    DebugCategory::BROWSER_SDK,
-                    "Connection successful",
-                    None,
-                );
+                debug().info(DebugCategory::BROWSER_SDK, "Connection successful", None);
                 Ok(result)
             }
             Err(err) => {
@@ -177,11 +169,7 @@ impl BrowserSdk {
     pub async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match self.provider_manager.disconnect().await {
             Ok(()) => {
-                debug().info(
-                    DebugCategory::BROWSER_SDK,
-                    "Disconnect successful",
-                    None,
-                );
+                debug().info(DebugCategory::BROWSER_SDK, "Disconnect successful", None);
                 Ok(())
             }
             Err(err) => {
@@ -224,11 +212,7 @@ impl BrowserSdk {
 
         let result = self.provider_manager.auto_connect().await;
         if result {
-            debug().info(
-                DebugCategory::BROWSER_SDK,
-                "Auto-connect successful",
-                None,
-            );
+            debug().info(DebugCategory::BROWSER_SDK, "Auto-connect successful", None);
         } else {
             debug().log(
                 DebugCategory::BROWSER_SDK,
@@ -404,11 +388,7 @@ impl BrowserSdk {
         &self,
         params: AutoConfirmEnableParams,
     ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
-        debug().info(
-            DebugCategory::BROWSER_SDK,
-            "Enabling auto-confirm",
-            None,
-        );
+        debug().info(DebugCategory::BROWSER_SDK, "Enabling auto-confirm", None);
 
         let provider = self
             .provider_manager
@@ -443,11 +423,7 @@ impl BrowserSdk {
     pub async fn disable_auto_confirm(
         &self,
     ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>> {
-        debug().info(
-            DebugCategory::BROWSER_SDK,
-            "Disabling auto-confirm",
-            None,
-        );
+        debug().info(DebugCategory::BROWSER_SDK, "Disabling auto-confirm", None);
 
         let provider = self
             .provider_manager
@@ -496,11 +472,7 @@ impl BrowserSdk {
 
         match provider.get_auto_confirm_status().await {
             Ok(result) => {
-                debug().info(
-                    DebugCategory::BROWSER_SDK,
-                    "Got auto-confirm status",
-                    None,
-                );
+                debug().info(DebugCategory::BROWSER_SDK, "Got auto-confirm status", None);
                 Ok(result)
             }
             Err(err) => {
@@ -565,10 +537,7 @@ impl BrowserSdk {
 ///
 /// # Returns
 /// `true` if the Phantom extension is available, `false` if the timeout is reached.
-pub async fn wait_for_phantom_extension(
-    detector: &dyn ExtensionDetector,
-    timeout_ms: u64,
-) -> bool {
+pub async fn wait_for_phantom_extension(detector: &dyn ExtensionDetector, timeout_ms: u64) -> bool {
     let start = std::time::Instant::now();
     let check_interval = std::time::Duration::from_millis(100);
     let timeout = std::time::Duration::from_millis(timeout_ms);
@@ -591,10 +560,16 @@ pub trait PhantomFeaturesProvider: Send + Sync {
     /// Query available features from the Phantom extension.
     ///
     /// Returns a list of feature identifiers (e.g., `["phantom_login"]`).
+    #[allow(clippy::type_complexity)]
     fn features(
         &self,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>> + Send + '_>,
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>,
+                > + Send
+                + '_,
+        >,
     >;
 }
 

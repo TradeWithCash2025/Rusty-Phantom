@@ -182,14 +182,10 @@ pub trait AutoConfirmProvider: Send + Sync {
     ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Disable auto-confirm.
-    async fn disable(
-        &self,
-    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>>;
+    async fn disable(&self) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Get auto-confirm status.
-    async fn status(
-        &self,
-    ) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>>;
+    async fn status(&self) -> Result<AutoConfirmResult, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Get supported chains.
     async fn supported_chains(

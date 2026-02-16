@@ -34,13 +34,15 @@ pub struct ToolHandler {
     /// JSON schema for input validation.
     pub input_schema: ToolInputSchema,
     /// Tool handler function.
+    #[allow(clippy::type_complexity)]
     pub handler: fn(
         serde_json::Value,
         &ToolContext,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<Output = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>>
-                + Send
+            dyn std::future::Future<
+                    Output = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>,
+                > + Send
                 + '_,
         >,
     >,

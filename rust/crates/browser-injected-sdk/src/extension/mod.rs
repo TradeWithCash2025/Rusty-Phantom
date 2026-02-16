@@ -36,7 +36,11 @@ pub fn create_extension_plugin(detector: Box<dyn ExtensionDetector>) -> Plugin {
     let extension = Extension::new(detector);
     Plugin {
         name: "extension".to_string(),
-        create: Box::new(move || Box::new(ExtensionPluginInstance { is_installed: extension.is_installed() })),
+        create: Box::new(move || {
+            Box::new(ExtensionPluginInstance {
+                is_installed: extension.is_installed(),
+            })
+        }),
     }
 }
 

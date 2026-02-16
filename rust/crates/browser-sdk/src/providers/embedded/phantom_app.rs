@@ -8,9 +8,7 @@
 //! runtime. Platform integrations (e.g., wasm-bindgen) can supply a real
 //! implementation via the [`PhantomAppCallback`] hook.
 
-use phantom_embedded_provider_core::{
-    AuthResult, PhantomAppAuthOptions, PhantomAppProvider,
-};
+use phantom_embedded_provider_core::{AuthResult, PhantomAppAuthOptions, PhantomAppProvider};
 
 /// Callback type for custom Phantom app authentication.
 ///
@@ -21,14 +19,13 @@ use phantom_embedded_provider_core::{
 pub type PhantomAppCallback = Box<
     dyn Fn(
             PhantomAppAuthOptions,
-        )
-            -> std::pin::Pin<
-                Box<
-                    dyn std::future::Future<
-                            Output = Result<AuthResult, Box<dyn std::error::Error + Send + Sync>>,
-                        > + Send,
-                >,
-            > + Send
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<AuthResult, Box<dyn std::error::Error + Send + Sync>>,
+                    > + Send,
+            >,
+        > + Send
         + Sync,
 >;
 

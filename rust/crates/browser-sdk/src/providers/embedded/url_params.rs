@@ -89,10 +89,7 @@ impl BrowserURLParamsAccessor {
                 let mut parts = pair.splitn(2, '=');
                 let key = parts.next()?;
                 let value = parts.next().unwrap_or("");
-                Some((
-                    Self::url_decode(key),
-                    Self::url_decode(value),
-                ))
+                Some((Self::url_decode(key), Self::url_decode(value)))
             })
             .collect()
     }

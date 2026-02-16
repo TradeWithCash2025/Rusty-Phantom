@@ -81,8 +81,7 @@ impl Ethereum {
                 // In TS: fetches accounts and updates state.
                 // Here we just trigger the event; account fetching should be done
                 // by the caller.
-                self.events
-                    .trigger_event(EthereumEventType::Connect, data);
+                self.events.trigger_event(EthereumEventType::Connect, data);
             }
             "disconnect" => {
                 if let Ok(mut guard) = self.accounts.write() {
@@ -106,8 +105,7 @@ impl Ethereum {
                         .trigger_event(EthereumEventType::AccountsChanged, data.clone());
                     // Dual-trigger: if accounts exist, also trigger connect
                     if has_accounts {
-                        self.events
-                            .trigger_event(EthereumEventType::Connect, data);
+                        self.events.trigger_event(EthereumEventType::Connect, data);
                     }
                 }
             }
@@ -174,8 +172,7 @@ impl EthereumChain for Ethereum {
     }
 
     async fn connect(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let accounts =
-            operations::connect(self.strategy.as_ref(), &self.events, false).await?;
+        let accounts = operations::connect(self.strategy.as_ref(), &self.events, false).await?;
         if let Ok(mut guard) = self.accounts.write() {
             *guard = accounts.clone();
         }
@@ -301,8 +298,6 @@ impl EthereumChain for Ethereum {
 pub fn create_ethereum_plugin(strategy: Arc<dyn EthereumStrategy>) -> Plugin {
     Plugin {
         name: "ethereum".to_string(),
-        create: Box::new(move || {
-            Box::new(Ethereum::new(strategy.clone()))
-        }),
+        create: Box::new(move || Box::new(Ethereum::new(strategy.clone()))),
     }
 }

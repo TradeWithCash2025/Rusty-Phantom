@@ -5,14 +5,13 @@ pub mod injected;
 
 pub use embedded::{
     BrowserAuthConfig, BrowserAuthProvider, BrowserEmbeddedProvider, BrowserLogger,
-    BrowserPlatformAdapter, BrowserPlatformConfig, BrowserPhantomAppProvider, BrowserStorage,
+    BrowserPhantomAppProvider, BrowserPlatformAdapter, BrowserPlatformConfig, BrowserStorage,
     BrowserURLParamsAccessor,
 };
 pub use injected::{
     ChainCallbacks, InjectedProvider, InjectedProviderConfig, InjectedWalletEthereumChain,
-    InjectedWalletSolanaChain, WalletStandardAccount, WalletStandardFeatures,
-    WalletStandardSolanaAdapter, WalletStandardWallet, StandardConnectFeature,
-    StandardDisconnectFeature, StandardEventsChangeProperties, StandardEventsFeature,
-    SolanaSignMessageFeature, SolanaSignTransactionFeature,
-    SolanaSignAndSendTransactionFeature,
+    InjectedWalletSolanaChain, SolanaSignAndSendTransactionFeature, SolanaSignMessageFeature,
+    SolanaSignTransactionFeature, StandardConnectFeature, StandardDisconnectFeature,
+    StandardEventsChangeProperties, StandardEventsFeature, WalletStandardAccount,
+    WalletStandardFeatures, WalletStandardSolanaAdapter, WalletStandardWallet,
 };

@@ -15,13 +15,12 @@ pub use phantom_client::PhantomClient;
 
 // Re-export types
 pub use types::{
-    AuthenticatorConfig, CreateAuthenticatorParams, CreateWalletResult,
-    DeleteAuthenticatorParams, DerivationInfo, GetWalletWithTagParams, GetWalletsResult,
-    IdTokenClaims, Keypair, PhantomClientConfig, PrepareErrorResponse, PrepareResponse,
-    SignAndSendTransactionParams, SignMessageParams, SignTransactionParams, SignTypedDataParams,
-    SignedTransaction, SignedTransactionResult, SimulationConfig, SpendingLimitConfig,
-    SubmissionConfig, Transaction, UserConfig, Wallet, WalletAddress, WalletServiceErrorData,
-    WalletServiceErrorType,
+    AuthenticatorConfig, CreateAuthenticatorParams, CreateWalletResult, DeleteAuthenticatorParams,
+    DerivationInfo, GetWalletWithTagParams, GetWalletsResult, IdTokenClaims, Keypair,
+    PhantomClientConfig, PrepareErrorResponse, PrepareResponse, SignAndSendTransactionParams,
+    SignMessageParams, SignTransactionParams, SignTypedDataParams, SignedTransaction,
+    SignedTransactionResult, SimulationConfig, SpendingLimitConfig, SubmissionConfig, Transaction,
+    UserConfig, Wallet, WalletAddress, WalletServiceErrorData, WalletServiceErrorType,
 };
 
 // Re-export errors

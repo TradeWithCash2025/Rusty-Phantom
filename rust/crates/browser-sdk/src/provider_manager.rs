@@ -12,12 +12,9 @@ use tokio::sync::RwLock;
 
 use crate::debug::{debug, DebugCategory};
 use crate::providers::{
-    BrowserEmbeddedProvider, BrowserLogger,
-    InjectedProvider, InjectedProviderConfig,
+    BrowserEmbeddedProvider, BrowserLogger, InjectedProvider, InjectedProviderConfig,
 };
-use crate::types::{
-    AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider,
-};
+use crate::types::{AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider};
 use crate::utils::{is_auth_callback_url, is_auth_failure_callback};
 
 /// Embedded provider auth types (subset that triggers embedded provider).
@@ -54,7 +51,10 @@ pub struct ProviderManager {
     current_provider_key: RwLock<Option<String>>,
     /// Concrete reference to the injected provider for chain-level access.
     injected_provider: RwLock<Option<Arc<InjectedProvider>>>,
-    event_listeners: Arc<RwLock<HashMap<String, Vec<(u64, Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>)>>>>,
+    #[allow(clippy::type_complexity)]
+    event_listeners: Arc<
+        RwLock<HashMap<String, Vec<(u64, Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>)>>>,
+    >,
     next_listener_id: RwLock<u64>,
     /// Track which provider pointers have had forwarding set up.
     forwarding_setup: RwLock<Vec<usize>>,
@@ -86,10 +86,7 @@ impl ProviderManager {
     /// sets the default provider. Matches the TypeScript `setDefaultProvider()`
     /// which creates providers and prefers embedded over injected.
     pub async fn initialize(&self) {
-        let has_injected = self
-            .config
-            .providers
-            .contains(&AuthProviderType::Injected);
+        let has_injected = self.config.providers.contains(&AuthProviderType::Injected);
         // TS: `config.providers.some(p => p !== "injected" && p !== "deeplink")`
         let has_embedded = self
             .config
@@ -287,14 +284,9 @@ impl ProviderManager {
                     address_types: self.config.address_types.clone(),
                 }));
                 *self.injected_provider.write().await = Some(injected.clone());
-                self.providers
-                    .write()
-                    .await
-                    .insert(key.clone(), injected);
+                self.providers.write().await.insert(key.clone(), injected);
             } else if provider_type == "embedded" {
-                let ewt = embedded_wallet_type
-                    .as_deref()
-                    .unwrap_or("user-wallet");
+                let ewt = embedded_wallet_type.as_deref().unwrap_or("user-wallet");
                 self.create_embedded_provider(ewt).await;
             }
         }
@@ -348,12 +340,11 @@ impl ProviderManager {
     }
 
     /// Register an external provider (e.g., embedded provider created by platform adapter).
-    pub async fn register_provider(
-        &self,
-        key: &str,
-        provider: Arc<dyn Provider>,
-    ) {
-        self.providers.write().await.insert(key.to_string(), provider);
+    pub async fn register_provider(&self, key: &str, provider: Arc<dyn Provider>) {
+        self.providers
+            .write()
+            .await
+            .insert(key.to_string(), provider);
     }
 
     /// Connect using the current provider.
@@ -363,11 +354,7 @@ impl ProviderManager {
         &self,
         auth_options: &AuthOptions,
     ) -> Result<ConnectResult, Box<dyn std::error::Error + Send + Sync>> {
-        debug().info(
-            DebugCategory::PROVIDER_MANAGER,
-            "Starting connection",
-            None,
-        );
+        debug().info(DebugCategory::PROVIDER_MANAGER, "Starting connection", None);
 
         // Validate that the requested provider is allowed
         if !self.config.providers.contains(&auth_options.provider) {
@@ -425,16 +412,16 @@ impl ProviderManager {
         self.save_provider_preference().await;
 
         // Emit connect event
-        self.emit("connect", Some(serde_json::json!({
-            "addresses": result.addresses.len(),
-            "provider": format!("{:?}", auth_options.provider),
-        }))).await;
+        self.emit(
+            "connect",
+            Some(serde_json::json!({
+                "addresses": result.addresses.len(),
+                "provider": format!("{:?}", auth_options.provider),
+            })),
+        )
+        .await;
 
-        debug().info(
-            DebugCategory::PROVIDER_MANAGER,
-            "Connect completed",
-            None,
-        );
+        debug().info(DebugCategory::PROVIDER_MANAGER, "Connect completed", None);
 
         Ok(result)
     }
@@ -467,9 +454,7 @@ impl ProviderManager {
     }
 
     /// Get enabled address types from the current provider.
-    pub async fn get_enabled_address_types(
-        &self,
-    ) -> Vec<phantom_client::constants::AddressFormat> {
+    pub async fn get_enabled_address_types(&self) -> Vec<phantom_client::constants::AddressFormat> {
         if let Some(provider) = self.get_current_provider().await {
             provider.get_enabled_address_types()
         } else {
@@ -529,8 +514,7 @@ impl ProviderManager {
                 match embedded_provider.auto_connect().await {
                     Ok(()) => {
                         if embedded_provider.is_connected() {
-                            *self.current_provider_key.write().await =
-                                Some(embedded_key.clone());
+                            *self.current_provider_key.write().await = Some(embedded_key.clone());
                             self.setup_event_forwarding(&embedded_provider).await;
                             debug().info(
                                 DebugCategory::PROVIDER_MANAGER,
@@ -558,10 +542,7 @@ impl ProviderManager {
         }
 
         // Check if injected provider is allowed
-        let injected_allowed = self
-            .config
-            .providers
-            .contains(&AuthProviderType::Injected);
+        let injected_allowed = self.config.providers.contains(&AuthProviderType::Injected);
 
         if injected_allowed {
             let provider = self.providers.read().await.get("injected").cloned();
@@ -574,8 +555,7 @@ impl ProviderManager {
 
                 if let Ok(()) = injected_provider.auto_connect().await {
                     if injected_provider.is_connected() {
-                        *self.current_provider_key.write().await =
-                            Some("injected".to_string());
+                        *self.current_provider_key.write().await = Some("injected".to_string());
                         self.setup_event_forwarding(&injected_provider).await;
                         debug().info(
                             DebugCategory::PROVIDER_MANAGER,
@@ -634,11 +614,9 @@ impl ProviderManager {
             for (_, callback) in list {
                 let cb = callback.clone();
                 let data = data.clone();
-                if let Err(e) =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-                        cb(data);
-                    }))
-                {
+                if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                    cb(data);
+                })) {
                     debug().error(
                         DebugCategory::PROVIDER_MANAGER,
                         &format!("Event callback error for '{}': {:?}", event, e),
@@ -726,14 +704,9 @@ impl ProviderManager {
         // For the injected provider, we register forwarding callbacks.
         if let Some(ref injected) = *self.injected_provider.read().await {
             // Compare by pointer identity to check if this IS the injected provider.
-            let injected_ptr = Arc::as_ptr(injected) as *const InjectedProvider as *const () as usize;
+            let injected_ptr = Arc::as_ptr(injected) as *const () as usize;
             if ptr == injected_ptr {
-                let events_to_forward = [
-                    "connect_start",
-                    "connect",
-                    "connect_error",
-                    "disconnect",
-                ];
+                let events_to_forward = ["connect_start", "connect", "connect_error", "disconnect"];
 
                 let listeners = self.event_listeners.clone();
 
@@ -777,10 +750,7 @@ impl ProviderManager {
 fn get_provider_key(provider_type: &str, embedded_wallet_type: Option<&str>) -> String {
     match provider_type {
         "injected" => "injected".to_string(),
-        "embedded" => format!(
-            "embedded-{}",
-            embedded_wallet_type.unwrap_or("app-wallet")
-        ),
+        "embedded" => format!("embedded-{}", embedded_wallet_type.unwrap_or("app-wallet")),
         _ => provider_type.to_string(),
     }
 }

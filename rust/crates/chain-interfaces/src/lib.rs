@@ -9,5 +9,6 @@ mod solana_chain;
 pub use ethereum_chain::{EthTransactionRequest, EthereumChain};
 pub use solana_chain::{
     SolanaChain, SolanaConnectOptions, SolanaConnectResult, SolanaNetwork,
-    SolanaSignMessageResult, SolanaSendTransactionResult, SolanaSendAllTransactionsResult,
+    SolanaSendAllTransactionsResult, SolanaSendTransactionResult, SolanaSignInInput,
+    SolanaSignInOutput, SolanaSignMessageResult, SolanaTransaction,
 };

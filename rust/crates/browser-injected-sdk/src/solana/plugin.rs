@@ -9,7 +9,8 @@ use super::strategy::SolanaStrategy;
 use crate::Plugin;
 use phantom_chain_interfaces::{
     SolanaChain, SolanaConnectOptions, SolanaConnectResult, SolanaNetwork,
-    SolanaSignMessageResult, SolanaSendTransactionResult, SolanaSendAllTransactionsResult,
+    SolanaSendAllTransactionsResult, SolanaSendTransactionResult, SolanaSignInInput,
+    SolanaSignInOutput, SolanaSignMessageResult,
 };
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -106,10 +107,7 @@ impl Solana {
     /// cannot borrow through the internal lock.  Use this method when you need
     /// the actual runtime value.
     pub fn get_public_key(&self) -> Option<String> {
-        self.public_key
-            .read()
-            .ok()
-            .and_then(|guard| guard.clone())
+        self.public_key.read().ok().and_then(|guard| guard.clone())
     }
 }
 
@@ -155,12 +153,51 @@ impl SolanaChain for Solana {
         Ok(())
     }
 
+    async fn get_account(&self) -> Option<String> {
+        operations::get_account(self.strategy.as_ref()).await
+    }
+
+    async fn sign_in(
+        &self,
+        input: &SolanaSignInInput,
+    ) -> Result<SolanaSignInOutput, Box<dyn std::error::Error + Send + Sync>> {
+        // Convert from chain-interfaces type to browser-injected-sdk type.
+        let sign_in_data = super::types::SolanaSignInData {
+            domain: input.domain.clone(),
+            address: input.address.clone(),
+            statement: input.statement.clone(),
+            uri: input.uri.clone(),
+            version: input.version.clone(),
+            chain_id: input.chain_id.clone(),
+            nonce: input.nonce.clone(),
+            issued_at: input.issued_at.clone(),
+            expiration_time: input.expiration_time.clone(),
+            not_before: input.not_before.clone(),
+            request_id: input.request_id.clone(),
+            resources: input.resources.clone(),
+        };
+
+        let result =
+            operations::sign_in(self.strategy.as_ref(), &self.events, &sign_in_data).await?;
+
+        if let Ok(mut guard) = self.public_key.write() {
+            if !result.address.is_empty() {
+                *guard = Some(result.address.clone());
+            }
+        }
+
+        Ok(SolanaSignInOutput {
+            address: result.address,
+            signature: result.signature,
+            signed_message: result.signed_message,
+        })
+    }
+
     async fn sign_message(
         &self,
         message: &[u8],
     ) -> Result<SolanaSignMessageResult, Box<dyn std::error::Error + Send + Sync>> {
-        let result =
-            operations::sign_message(self.strategy.as_ref(), message, None).await?;
+        let result = operations::sign_message(self.strategy.as_ref(), message, None).await?;
 
         let public_key = result.address.clone();
         if public_key.is_empty() {
@@ -237,8 +274,6 @@ impl SolanaChain for Solana {
 pub fn create_solana_plugin(strategy: Arc<dyn SolanaStrategy>) -> Plugin {
     Plugin {
         name: "solana".to_string(),
-        create: Box::new(move || {
-            Box::new(Solana::new(strategy.clone()))
-        }),
+        create: Box::new(move || Box::new(Solana::new(strategy.clone()))),
     }
 }

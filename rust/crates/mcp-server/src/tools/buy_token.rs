@@ -315,7 +315,12 @@ async fn handle_buy_token(
     };
 
     // Validate taker is a valid Solana address
-    if bs58::decode(&taker).into_vec().map(|v| v.len()).unwrap_or(0) != 32 {
+    if bs58::decode(&taker)
+        .into_vec()
+        .map(|v| v.len())
+        .unwrap_or(0)
+        != 32
+    {
         return Err("taker must be a valid Solana address".into());
     }
 
@@ -370,9 +375,7 @@ async fn handle_buy_token(
 
     require_positive_amount(amount_base_units)?;
 
-    let quote_api_url = resolve_quotes_api_url(
-        params.get("quoteApiUrl").and_then(|v| v.as_str()),
-    )?;
+    let quote_api_url = resolve_quotes_api_url(params.get("quoteApiUrl").and_then(|v| v.as_str()))?;
 
     // Build quote request body
     let buy_token = if buy_token_is_native {
@@ -400,7 +403,7 @@ async fn handle_buy_token(
     }
 
     if let Some(slippage) = params.get("slippageTolerance").and_then(|v| v.as_f64()) {
-        if !slippage.is_finite() || slippage < 0.0 || slippage > 100.0 {
+        if !slippage.is_finite() || !(0.0..=100.0).contains(&slippage) {
             return Err("slippageTolerance must be a number between 0 and 100".into());
         }
         body["slippageTolerance"] = json!(slippage);
@@ -477,7 +480,10 @@ async fn handle_buy_token(
         .ok_or("Quote response missing transaction data in first quote")?;
 
     // Decode transaction data based on encoding format
-    let base64_encoded_tx = params.get("base64EncodedTx").and_then(|v| v.as_bool()).unwrap_or(false);
+    let base64_encoded_tx = params
+        .get("base64EncodedTx")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let decoded: Vec<u8> = if base64_encoded_tx {
         // If base64EncodedTx is true, decode as base64
         use base64::Engine;

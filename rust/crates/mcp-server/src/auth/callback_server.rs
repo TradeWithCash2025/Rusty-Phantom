@@ -88,8 +88,10 @@ impl CallbackServer {
         let addr = format!("{}:{}", self.host, self.port);
         let listener = TcpListener::bind(&addr).await?;
         self.is_listening.store(true, Ordering::Release);
-        self.logger
-            .info(&format!("Callback server listening on {}", self.get_callback_url()));
+        self.logger.info(&format!(
+            "Callback server listening on {}",
+            self.get_callback_url()
+        ));
 
         let (tx, rx) = oneshot::channel::<Result<OAuthCallbackParams, String>>();
         let tx = Arc::new(tokio::sync::Mutex::new(Some(tx)));
@@ -124,7 +126,8 @@ impl CallbackServer {
                         let request_line = request.lines().next().unwrap_or("");
                         let parts: Vec<&str> = request_line.split_whitespace().collect();
                         if parts.len() < 2 || parts[0] != "GET" {
-                            let response = format_http_response(404, &get_error_page("Invalid endpoint"));
+                            let response =
+                                format_http_response(404, &get_error_page("Invalid endpoint"));
                             let _ = stream.write_all(response.as_bytes()).await;
                             continue;
                         }
@@ -145,7 +148,8 @@ impl CallbackServer {
                         };
 
                         if url_path != path {
-                            let response = format_http_response(404, &get_error_page("Invalid endpoint"));
+                            let response =
+                                format_http_response(404, &get_error_page("Invalid endpoint"));
                             let _ = stream.write_all(response.as_bytes()).await;
                             continue;
                         }
@@ -154,9 +158,11 @@ impl CallbackServer {
                         let params = parse_query_string(query_string);
 
                         let session_id = params.get("session_id").cloned().unwrap_or_default();
-                        let response_type = params.get("response_type").cloned().unwrap_or_default();
+                        let response_type =
+                            params.get("response_type").cloned().unwrap_or_default();
                         let wallet_id = params.get("wallet_id").cloned().unwrap_or_default();
-                        let organization_id = params.get("organization_id").cloned().unwrap_or_default();
+                        let organization_id =
+                            params.get("organization_id").cloned().unwrap_or_default();
                         let auth_user_id = params.get("auth_user_id").cloned().unwrap_or_default();
 
                         logger.info("Received SSO callback");
@@ -164,19 +170,30 @@ impl CallbackServer {
                         // Validate session_id (CSRF protection)
                         if session_id.is_empty() || session_id != expected_state {
                             logger.error("Invalid session_id parameter");
-                            let response = format_http_response(400, &get_error_page("Authorization failed: Invalid session_id"));
+                            let response = format_http_response(
+                                400,
+                                &get_error_page("Authorization failed: Invalid session_id"),
+                            );
                             let _ = stream.write_all(response.as_bytes()).await;
                             let mut guard = tx.lock().await;
                             if let Some(sender) = guard.take() {
-                                let _ = sender.send(Err("Invalid session_id parameter".to_string()));
+                                let _ =
+                                    sender.send(Err("Invalid session_id parameter".to_string()));
                             }
                             return;
                         }
 
                         if response_type != "success" {
-                            let error = format!("SSO flow failed with response_type: {}", response_type);
+                            let error =
+                                format!("SSO flow failed with response_type: {}", response_type);
                             logger.error(&error);
-                            let response = format_http_response(400, &get_error_page(&format!("Authorization failed: {}", response_type)));
+                            let response = format_http_response(
+                                400,
+                                &get_error_page(&format!(
+                                    "Authorization failed: {}",
+                                    response_type
+                                )),
+                            );
                             let _ = stream.write_all(response.as_bytes()).await;
                             let mut guard = tx.lock().await;
                             if let Some(sender) = guard.take() {
@@ -186,7 +203,10 @@ impl CallbackServer {
                         }
 
                         if wallet_id.is_empty() {
-                            let response = format_http_response(400, &get_error_page("Authorization failed: Missing wallet_id"));
+                            let response = format_http_response(
+                                400,
+                                &get_error_page("Authorization failed: Missing wallet_id"),
+                            );
                             let _ = stream.write_all(response.as_bytes()).await;
                             let mut guard = tx.lock().await;
                             if let Some(sender) = guard.take() {
@@ -196,21 +216,29 @@ impl CallbackServer {
                         }
 
                         if organization_id.is_empty() {
-                            let response = format_http_response(400, &get_error_page("Authorization failed: Missing organization_id"));
+                            let response = format_http_response(
+                                400,
+                                &get_error_page("Authorization failed: Missing organization_id"),
+                            );
                             let _ = stream.write_all(response.as_bytes()).await;
                             let mut guard = tx.lock().await;
                             if let Some(sender) = guard.take() {
-                                let _ = sender.send(Err("Missing organization_id parameter".to_string()));
+                                let _ = sender
+                                    .send(Err("Missing organization_id parameter".to_string()));
                             }
                             return;
                         }
 
                         if auth_user_id.is_empty() {
-                            let response = format_http_response(400, &get_error_page("Authorization failed: Missing auth_user_id"));
+                            let response = format_http_response(
+                                400,
+                                &get_error_page("Authorization failed: Missing auth_user_id"),
+                            );
                             let _ = stream.write_all(response.as_bytes()).await;
                             let mut guard = tx.lock().await;
                             if let Some(sender) = guard.take() {
-                                let _ = sender.send(Err("Missing auth_user_id parameter".to_string()));
+                                let _ =
+                                    sender.send(Err("Missing auth_user_id parameter".to_string()));
                             }
                             return;
                         }
@@ -254,10 +282,7 @@ fn parse_query_string(query: &str) -> HashMap<String, String> {
     let mut params = HashMap::new();
     for pair in query.split('&') {
         if let Some((key, value)) = pair.split_once('=') {
-            params.insert(
-                url_decode(key),
-                url_decode(value),
-            );
+            params.insert(url_decode(key), url_decode(value));
         }
     }
     params

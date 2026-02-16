@@ -145,10 +145,7 @@ pub trait KeyStorage: Send + Sync {
     ) -> Result<Option<(KeyPairRecord, Vec<u8>)>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Remove a key pair record.
-    async fn remove(
-        &self,
-        key: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn remove(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Interior mutable state for the stamper.
@@ -212,14 +209,13 @@ impl IndexedDbStamper {
         algorithm: Algorithm,
         status: KeyPairStatus,
     ) -> Result<(KeyPairRecord, Vec<u8>), Box<dyn std::error::Error + Send + Sync>> {
-        let (public_key_bytes, key_handle) =
-            self.crypto.generate_key_pair(algorithm).await?;
+        let (public_key_bytes, key_handle) = self.crypto.generate_key_pair(algorithm).await?;
 
         let public_key_base58 = bs58::encode(&public_key_bytes).into_string();
 
         // Create deterministic key ID from SHA-256 hash of public key, base64url-encoded, first 16 chars
         let key_id = {
-            use sha2::{Sha256, Digest};
+            use sha2::{Digest, Sha256};
             let hash = Sha256::digest(&public_key_bytes);
             let encoded = phantom_base64url::base64url_encode(&hash);
             encoded[..16].to_string()
@@ -283,10 +279,7 @@ impl Stamper for IndexedDbStamper {
         let record_clone = record.clone();
         drop(state);
 
-        let signature = self
-            .crypto
-            .sign(algorithm, &key_handle, data)
-            .await?;
+        let signature = self.crypto.sign(algorithm, &key_handle, data).await?;
 
         let signature_base64url = phantom_base64url::base64url_encode(&signature);
 
@@ -304,9 +297,7 @@ impl Stamper for IndexedDbStamper {
                     "algorithm": algorithm_str,
                 })
             }
-            StampParams::Oidc {
-                id_token, salt, ..
-            } => {
+            StampParams::Oidc { id_token, salt, .. } => {
                 serde_json::json!({
                     "kind": "OIDC",
                     "idToken": id_token,
@@ -347,9 +338,7 @@ impl Stamper for IndexedDbStamper {
 /// Implement the StamperWithKeyManagement trait.
 #[async_trait::async_trait]
 impl StamperWithKeyManagement for IndexedDbStamper {
-    async fn init(
-        &self,
-    ) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>> {
+    async fn init(&self) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Try to load existing active keypair
         let active_key = format!("{}-active", self.config.key_name);
         if let Some(record) = self.storage.load(&active_key).await? {
@@ -488,9 +477,7 @@ impl StamperWithKeyManagement for IndexedDbStamper {
         Ok(())
     }
 
-    async fn rollback_rotation(
-        &self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn rollback_rotation(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let has_pending = {
             let state = self.state.read().await;
             state.pending_record.is_some()

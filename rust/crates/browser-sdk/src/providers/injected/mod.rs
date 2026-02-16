@@ -40,11 +40,7 @@ pub trait ChainCallbacks: Send + Sync {
     /// Get the current wallet addresses.
     fn get_addresses(&self) -> Vec<WalletAddress>;
     /// Register an event listener.
-    fn on(
-        &self,
-        event: &str,
-        callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>,
-    ) -> u64;
+    fn on(&self, event: &str, callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>) -> u64;
     /// Remove an event listener.
     fn off(&self, event: &str, listener_id: u64);
 }
@@ -82,6 +78,7 @@ struct ConnectOptions {
 /// Listeners are stored per event name and can be added ([`on`](Self::on))
 /// or removed ([`off`](Self::off)) by their unique numeric ID.
 struct EventListenerRegistry {
+    #[allow(clippy::type_complexity)]
     listeners: Mutex<HashMap<String, Vec<(u64, Arc<dyn Fn(serde_json::Value) + Send + Sync>)>>>,
     next_id: AtomicU64,
 }
@@ -95,11 +92,7 @@ impl EventListenerRegistry {
     }
 
     /// Register a callback for the given event. Returns a unique listener ID.
-    fn on(
-        &self,
-        event: &str,
-        callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>,
-    ) -> u64 {
+    fn on(&self, event: &str, callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut listeners = self.listeners.lock().unwrap();
         listeners
@@ -225,18 +218,18 @@ impl InjectedProvider {
     ///
     /// Returns a listener ID that can be used with [`off`](Self::off) to
     /// remove the listener.
-    pub fn on(
-        &self,
-        event: &str,
-        callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>,
-    ) -> u64 {
+    pub fn on(&self, event: &str, callback: Arc<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
         debug!(event = event, "Adding event listener");
         self.event_registry.on(event, callback)
     }
 
     /// Remove an event listener by its ID.
     pub fn off(&self, event: &str, listener_id: u64) {
-        debug!(event = event, listener_id = listener_id, "Removing event listener");
+        debug!(
+            event = event,
+            listener_id = listener_id,
+            "Removing event listener"
+        );
         self.event_registry.off(event, listener_id);
     }
 
@@ -277,11 +270,7 @@ impl InjectedProvider {
                     )
                     .into()),
                 },
-                None => Err(format!(
-                    "Wallet \"{}\" has no providers available.",
-                    info.name
-                )
-                .into()),
+                None => Err(format!("Wallet \"{}\" has no providers available.", info.name).into()),
             },
             None => Err(format!(
                 "Wallet \"{}\" not found. Please ensure wallet discovery has completed.",
@@ -314,11 +303,7 @@ impl InjectedProvider {
                     )
                     .into()),
                 },
-                None => Err(format!(
-                    "Wallet \"{}\" has no providers available.",
-                    info.name
-                )
-                .into()),
+                None => Err(format!("Wallet \"{}\" has no providers available.", info.name).into()),
             },
             None => Err(format!(
                 "Wallet \"{}\" not found. Please ensure wallet discovery has completed.",
@@ -366,9 +351,7 @@ impl InjectedProvider {
                 std::thread::yield_now();
             }
         });
-        let state = states
-            .entry(wallet_id.to_string())
-            .or_insert_with(WalletState::default);
+        let state = states.entry(wallet_id.to_string()).or_default();
 
         // Keep addresses of other types, replace same-type addresses.
         let other_addresses: Vec<WalletAddress> = state
@@ -380,7 +363,7 @@ impl InjectedProvider {
         let typed_addresses: Vec<WalletAddress> = new_addresses
             .iter()
             .map(|addr| WalletAddress {
-                address_type: address_type.clone(),
+                address_type,
                 address: addr.clone(),
             })
             .collect();
@@ -443,16 +426,13 @@ impl InjectedProvider {
                 wallet_id = requested_wallet_id,
                 "Unknown injected wallet id requested"
             );
-            return Err(
-                format!("Unknown injected wallet id: {}", requested_wallet_id).into(),
-            );
+            return Err(format!("Unknown injected wallet id: {}", requested_wallet_id).into());
         }
 
         let wallet_info = self.wallet_registry.get_by_id(requested_wallet_id);
         match wallet_info {
             Some(info) if info.providers.is_some() => {
-                *self.selected_wallet_id.write().await =
-                    Some(requested_wallet_id.to_string());
+                *self.selected_wallet_id.write().await = Some(requested_wallet_id.to_string());
                 debug!(
                     wallet_id = requested_wallet_id,
                     "Selected injected wallet for connection"
@@ -487,10 +467,7 @@ impl InjectedProvider {
             Some(ref p) => p,
             None => {
                 let wallet_id = self.get_selected_wallet_id().await;
-                let err_msg = format!(
-                    "Wallet adapter not available for wallet: {}",
-                    wallet_id
-                );
+                let err_msg = format!("Wallet adapter not available for wallet: {}", wallet_id);
                 error!(wallet_id = %wallet_id, "Wallet adapter not available");
                 self.emit(
                     "connect_error",
@@ -682,16 +659,16 @@ impl InjectedProvider {
 
         // Build wallet info for the result.
         let wallet = wallet_id.as_ref().and_then(|wid| {
-            self.wallet_registry.get_by_id(wid).map(|info| {
-                ConnectResultWalletInfo {
+            self.wallet_registry
+                .get_by_id(wid)
+                .map(|info| ConnectResultWalletInfo {
                     id: info.id,
                     name: info.name,
                     icon: info.icon,
                     address_types: info.address_types,
                     rdns: info.rdns,
                     discovery: info.discovery,
-                }
-            })
+                })
         });
 
         let result = ConnectResult {
@@ -798,12 +775,13 @@ impl InjectedProvider {
                         "disconnect",
                         Box::new(move |_data| {
                             debug!(wallet_id = %wid, "Solana disconnect event received");
-                            Self::remove_addresses_of_type_sync(
-                                &ws_c, &wid, AddressFormat::Solana,
+                            Self::remove_addresses_of_type_sync(&ws_c, &wid, AddressFormat::Solana);
+                            er_c.emit(
+                                "disconnect",
+                                serde_json::json!({
+                                    "source": "wallet",
+                                }),
                             );
-                            er_c.emit("disconnect", serde_json::json!({
-                                "source": "wallet",
-                            }));
                         }),
                     );
                     new_entries.push(ChainListenerEntry {
@@ -867,24 +845,32 @@ impl InjectedProvider {
                         Box::new(move |data| {
                             // data may be an array of accounts or { chainId: ... }
                             let accounts: Vec<String> = if let Some(arr) = data.as_array() {
-                                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
                             } else {
                                 vec![]
                             };
                             debug!(wallet_id = %wid, ?accounts, "Ethereum connect event received");
                             if !accounts.is_empty() {
                                 let new_addrs = Self::update_wallet_addresses_sync(
-                                    &ws_c, &wid, &accounts, AddressFormat::Ethereum,
+                                    &ws_c,
+                                    &wid,
+                                    &accounts,
+                                    AddressFormat::Ethereum,
                                 );
                                 let sel = swid_c.try_read().ok().and_then(|g| g.clone());
-                                er_c.emit("connect", serde_json::json!({
-                                    "addresses": new_addrs.iter().map(|a| serde_json::json!({
-                                        "addressType": format!("{:?}", a.address_type),
-                                        "address": a.address,
-                                    })).collect::<Vec<_>>(),
-                                    "source": "wallet",
-                                    "walletId": sel,
-                                }));
+                                er_c.emit(
+                                    "connect",
+                                    serde_json::json!({
+                                        "addresses": new_addrs.iter().map(|a| serde_json::json!({
+                                            "addressType": format!("{:?}", a.address_type),
+                                            "address": a.address,
+                                        })).collect::<Vec<_>>(),
+                                        "source": "wallet",
+                                        "walletId": sel,
+                                    }),
+                                );
                             }
                         }),
                     );
@@ -903,11 +889,16 @@ impl InjectedProvider {
                         Box::new(move |_data| {
                             debug!(wallet_id = %wid, "Ethereum disconnect event received");
                             Self::remove_addresses_of_type_sync(
-                                &ws_c, &wid, AddressFormat::Ethereum,
+                                &ws_c,
+                                &wid,
+                                AddressFormat::Ethereum,
                             );
-                            er_c.emit("disconnect", serde_json::json!({
-                                "source": "wallet",
-                            }));
+                            er_c.emit(
+                                "disconnect",
+                                serde_json::json!({
+                                    "source": "wallet",
+                                }),
+                            );
                         }),
                     );
                     new_entries.push(ChainListenerEntry {
@@ -1184,10 +1175,7 @@ impl Provider for InjectedProvider {
     fn is_connected(&self) -> bool {
         let wallet_id = self.get_wallet_id_sync();
         if let Ok(states) = self.wallet_states.try_read() {
-            states
-                .get(&wallet_id)
-                .map(|s| s.connected)
-                .unwrap_or(false)
+            states.get(&wallet_id).map(|s| s.connected).unwrap_or(false)
         } else {
             false
         }
@@ -1231,9 +1219,7 @@ impl Provider for InjectedProvider {
                     skip_event_listeners: true,
                 };
 
-                let connected_addresses = match self
-                    .connect_to_wallet(&wallet_info, &options)
-                    .await
+                let connected_addresses = match self.connect_to_wallet(&wallet_info, &options).await
                 {
                     Ok(addrs) => addrs,
                     Err(err) => {

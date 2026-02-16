@@ -8,6 +8,7 @@ use phantom_mcp_server::session::types::SessionData;
 use tokio::sync::Mutex;
 
 /// Configuration options for PluginSession.
+#[derive(Default)]
 pub struct PluginSessionOptions {
     /// Application identifier from Phantom Portal.
     pub app_id: Option<String>,
@@ -15,16 +16,6 @@ pub struct PluginSessionOptions {
     pub callback_port: Option<u16>,
     /// Directory to store session data.
     pub session_dir: Option<String>,
-}
-
-impl Default for PluginSessionOptions {
-    fn default() -> Self {
-        Self {
-            app_id: None,
-            callback_port: None,
-            session_dir: None,
-        }
-    }
 }
 
 /// Plugin session manager.
@@ -40,7 +31,11 @@ impl PluginSession {
     /// Create a new plugin session.
     pub fn new(options: PluginSessionOptions) -> Self {
         let session_manager = SessionManager::new(SessionManagerOptions {
-            app_id: Some(options.app_id.unwrap_or_else(|| "phantom-openclaw".to_string())),
+            app_id: Some(
+                options
+                    .app_id
+                    .unwrap_or_else(|| "phantom-openclaw".to_string()),
+            ),
             callback_port: options.callback_port,
             session_dir: options.session_dir,
             ..Default::default()

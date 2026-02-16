@@ -93,15 +93,13 @@ impl BrowserStorage {
         if !path.exists() {
             return Ok(None);
         }
-        let contents = std::fs::read_to_string(&path).map_err(|e| {
-            format!("Failed to read '{}': {}", path.display(), e)
-        })?;
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read '{}': {}", path.display(), e))?;
         if contents.trim().is_empty() {
             return Ok(None);
         }
-        let value: T = serde_json::from_str(&contents).map_err(|e| {
-            format!("Failed to parse '{}': {}", path.display(), e)
-        })?;
+        let value: T = serde_json::from_str(&contents)
+            .map_err(|e| format!("Failed to parse '{}': {}", path.display(), e))?;
         Ok(Some(value))
     }
 
@@ -113,25 +111,19 @@ impl BrowserStorage {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.ensure_dir()?;
         let path = self.key_path(key);
-        let contents = serde_json::to_string_pretty(value).map_err(|e| {
-            format!("Failed to serialize data for '{}': {}", key, e)
-        })?;
-        std::fs::write(&path, contents).map_err(|e| {
-            format!("Failed to write '{}': {}", path.display(), e)
-        })?;
+        let contents = serde_json::to_string_pretty(value)
+            .map_err(|e| format!("Failed to serialize data for '{}': {}", key, e))?;
+        std::fs::write(&path, contents)
+            .map_err(|e| format!("Failed to write '{}': {}", path.display(), e))?;
         Ok(())
     }
 
     /// Remove a file by key.
-    fn remove_key(
-        &self,
-        key: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn remove_key(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let path = self.key_path(key);
         if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| {
-                format!("Failed to remove '{}': {}", path.display(), e)
-            })?;
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove '{}': {}", path.display(), e))?;
         }
         Ok(())
     }
@@ -173,9 +165,7 @@ impl EmbeddedStorage for BrowserStorage {
         Ok(())
     }
 
-    async fn clear_session(
-        &self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn clear_session(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.remove_key(SESSION_KEY)?;
 
         let mut cached = self.cached_session.write().await;

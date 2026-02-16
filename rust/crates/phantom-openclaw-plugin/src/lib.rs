@@ -7,7 +7,7 @@ pub mod client;
 pub mod session;
 pub mod tools;
 
-use std::sync::{Arc, OnceLock, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use client::types::OpenClawApi;
 use session::{PluginSession, PluginSessionOptions};

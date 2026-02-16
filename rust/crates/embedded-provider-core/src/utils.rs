@@ -51,10 +51,7 @@ where
                 if attempt == max_retries {
                     logger.error(
                         "EMBEDDED_PROVIDER",
-                        &format!(
-                            "{} failed after {} attempts",
-                            operation_name, max_retries
-                        ),
+                        &format!("{} failed after {} attempts", operation_name, max_retries),
                         Some(&serde_json::json!({
                             "finalError": error.to_string(),
                         })),
@@ -98,8 +95,5 @@ pub fn generate_session_id() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    format!(
-        "session_{:x}{:x}_{}",
-        random1, random2, now
-    )
+    format!("session_{:x}{:x}_{}", random1, random2, now)
 }

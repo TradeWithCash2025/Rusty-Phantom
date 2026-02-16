@@ -24,9 +24,13 @@ pub fn parse_browser_from_user_agent(user_agent: &str, has_brave_api: bool) -> B
     }
 
     let extract_major_version = |re: &Regex, ua: &str| -> Option<String> {
-        re.captures(ua)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().split('.').next().unwrap_or("unknown").to_string())
+        re.captures(ua).and_then(|cap| cap.get(1)).map(|m| {
+            m.as_str()
+                .split('.')
+                .next()
+                .unwrap_or("unknown")
+                .to_string()
+        })
     };
 
     // Edge (Chromium-based) - must be before Chrome

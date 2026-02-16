@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use phantom_chain_interfaces::{
     SolanaChain, SolanaConnectOptions, SolanaConnectResult, SolanaNetwork,
-    SolanaSignMessageResult, SolanaSendAllTransactionsResult, SolanaSendTransactionResult,
+    SolanaSendAllTransactionsResult, SolanaSendTransactionResult, SolanaSignInInput,
+    SolanaSignInOutput, SolanaSignMessageResult,
 };
 
 // ============================================================================
@@ -20,6 +21,7 @@ use phantom_chain_interfaces::{
 
 /// A generic, thread-safe event listener registry keyed by event name strings.
 struct EventListenerRegistry {
+    #[allow(clippy::type_complexity)]
     listeners: Mutex<HashMap<String, Vec<(u64, Arc<dyn Fn(serde_json::Value) + Send + Sync>)>>>,
     next_id: AtomicU64,
 }
@@ -37,7 +39,7 @@ impl EventListenerRegistry {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut map = self.listeners.lock().unwrap();
         map.entry(event.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((id, Arc::from(listener)));
         id
     }
@@ -126,15 +128,12 @@ impl InjectedWalletSolanaChain {
                 "connect",
                 Box::new(move |value| {
                     // The value may be a string (public key) or an object with a publicKey field.
-                    let pk = value
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            value
-                                .get("publicKey")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string())
-                        });
+                    let pk = value.as_str().map(|s| s.to_string()).or_else(|| {
+                        value
+                            .get("publicKey")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    });
                     if let Some(ref key) = pk {
                         *this.public_key_cache.lock().unwrap() = Some(key.clone());
                     }
@@ -269,6 +268,45 @@ impl SolanaChain for InjectedWalletSolanaChain {
                     wallet_name = %self.wallet_name,
                     error = %e,
                     "External wallet Solana disconnect failed"
+                );
+                Err(e)
+            }
+        }
+    }
+
+    async fn get_account(&self) -> Option<String> {
+        self.inner.get_account().await
+    }
+
+    async fn sign_in(
+        &self,
+        input: &SolanaSignInInput,
+    ) -> Result<SolanaSignInOutput, Box<dyn std::error::Error + Send + Sync>> {
+        tracing::info!(
+            wallet_id = %self.wallet_id,
+            wallet_name = %self.wallet_name,
+            "External wallet Solana signIn"
+        );
+
+        match self.inner.sign_in(input).await {
+            Ok(result) => {
+                if !result.address.is_empty() {
+                    *self.public_key_cache.lock().unwrap() = Some(result.address.clone());
+                }
+                tracing::info!(
+                    wallet_id = %self.wallet_id,
+                    wallet_name = %self.wallet_name,
+                    address = %result.address,
+                    "External wallet Solana signIn success"
+                );
+                Ok(result)
+            }
+            Err(e) => {
+                tracing::error!(
+                    wallet_id = %self.wallet_id,
+                    wallet_name = %self.wallet_name,
+                    error = %e,
+                    "External wallet Solana signIn failed"
                 );
                 Err(e)
             }
@@ -429,7 +467,11 @@ impl SolanaChain for InjectedWalletSolanaChain {
             "External wallet Solana signAndSendAllTransactions"
         );
 
-        match self.inner.sign_and_send_all_transactions(transactions).await {
+        match self
+            .inner
+            .sign_and_send_all_transactions(transactions)
+            .await
+        {
             Ok(result) => {
                 tracing::info!(
                     wallet_id = %self.wallet_id,

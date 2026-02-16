@@ -14,15 +14,10 @@ use crate::tools;
 use crate::utils::logger::Logger;
 
 /// Configuration options for PhantomMCPServer.
+#[derive(Default)]
 pub struct PhantomMCPServerOptions {
     /// Session manager configuration.
     pub session: Option<SessionManagerOptions>,
-}
-
-impl Default for PhantomMCPServerOptions {
-    fn default() -> Self {
-        Self { session: None }
-    }
 }
 
 /// PhantomMCPServer — main server class that wires everything together.
@@ -36,9 +31,7 @@ impl PhantomMCPServer {
     pub fn new(options: PhantomMCPServerOptions) -> Self {
         let logger = Logger::new("PhantomMCPServer");
 
-        let session_manager = SessionManager::new(
-            options.session.unwrap_or_default(),
-        );
+        let session_manager = SessionManager::new(options.session.unwrap_or_default());
 
         logger.info("PhantomMCPServer initialized");
 
@@ -65,8 +58,10 @@ impl PhantomMCPServer {
                 })
                 .collect();
 
-            self.logger
-                .info(&format!("Returning {} tool definitions", tool_definitions.len()));
+            self.logger.info(&format!(
+                "Returning {} tool definitions",
+                tool_definitions.len()
+            ));
 
             json!({ "tools": tool_definitions })
         })) {
@@ -85,11 +80,7 @@ impl PhantomMCPServer {
     }
 
     /// Handle a tools/call request.
-    pub async fn call_tool(
-        &self,
-        tool_name: &str,
-        arguments: Value,
-    ) -> Value {
+    pub async fn call_tool(&self, tool_name: &str, arguments: Value) -> Value {
         self.logger
             .info(&format!("Handling tools/call request for: {}", tool_name));
 
@@ -120,8 +111,7 @@ impl PhantomMCPServer {
         };
 
         // Step 4: Execute tool handler
-        self.logger
-            .info(&format!("Executing tool: {}", tool_name));
+        self.logger.info(&format!("Executing tool: {}", tool_name));
 
         match (tool.handler)(arguments, &context).await {
             Ok(result) => {
@@ -208,25 +198,14 @@ impl PhantomMCPServer {
             };
 
             let id = request.get("id").cloned().unwrap_or(Value::Null);
-            let method = request
-                .get("method")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("");
 
             let result = match method {
-                "tools/list" => {
-                    self.list_tools()
-                }
+                "tools/list" => self.list_tools(),
                 "tools/call" => {
                     let params = request.get("params").cloned().unwrap_or(json!({}));
-                    let tool_name = params
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let arguments = params
-                        .get("arguments")
-                        .cloned()
-                        .unwrap_or(json!({}));
+                    let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
                     self.call_tool(tool_name, arguments).await
                 }
                 "initialize" => {

@@ -28,17 +28,10 @@ pub struct Plugin {
 }
 
 /// Configuration for creating a Phantom instance.
+#[derive(Default)]
 pub struct CreatePhantomConfig {
     /// List of plugins to register.
     pub plugins: Vec<Plugin>,
-}
-
-impl Default for CreatePhantomConfig {
-    fn default() -> Self {
-        Self {
-            plugins: vec![],
-        }
-    }
 }
 
 /// A Phantom instance composed of plugins.
@@ -51,9 +44,7 @@ pub struct Phantom {
 impl Phantom {
     /// Get a plugin by name, downcasting to the expected type.
     pub fn get<T: 'static>(&self, name: &str) -> Option<&T> {
-        self.plugins
-            .get(name)
-            .and_then(|p| p.downcast_ref::<T>())
+        self.plugins.get(name).and_then(|p| p.downcast_ref::<T>())
     }
 
     /// Check if a plugin is registered.
@@ -82,8 +73,7 @@ pub use auto_confirm::{
     AutoConfirmSupportedChainsResult,
 };
 pub use ethereum::{
-    create_ethereum_plugin, create_siwe_message, Ethereum, EthereumSignInData,
-    EthereumTransaction,
+    create_ethereum_plugin, create_siwe_message, Ethereum, EthereumSignInData, EthereumTransaction,
 };
 pub use extension::{create_extension_plugin, Extension, ExtensionDetector};
 pub use solana::{create_solana_plugin, Solana, SolanaSignInData};

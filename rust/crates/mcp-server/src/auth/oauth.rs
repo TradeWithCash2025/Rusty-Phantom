@@ -70,7 +70,11 @@ impl OAuthFlow {
 
         let callback_port = if let Some(port) = callback_port {
             if port == 0 {
-                return Err(format!("Invalid callbackPort: \"{}\". Must be between 1 and 65535.", port).into());
+                return Err(format!(
+                    "Invalid callbackPort: \"{}\". Must be between 1 and 65535.",
+                    port
+                )
+                .into());
             }
             port
         } else {
@@ -142,8 +146,7 @@ impl OAuthFlow {
                 client_id_issued_at: now,
             }
         } else {
-            self.logger
-                .info("Step 1: Registering OAuth client via DCR");
+            self.logger.info("Step 1: Registering OAuth client via DCR");
             self.logger.warn(
                 "DCR is not currently supported by auth.phantom.app - \
                  you should provide PHANTOM_APP_ID or PHANTOM_CLIENT_ID",
@@ -176,8 +179,10 @@ impl OAuthFlow {
         let callback_future = callback_server.start_and_wait_for_callback(&session_id);
 
         // Step 6: Open browser
-        self.logger
-            .info(&format!("Step 6: Opening browser for {} authentication", self.provider));
+        self.logger.info(&format!(
+            "Step 6: Opening browser for {} authentication",
+            self.provider
+        ));
         match webbrowser::open(&auth_url) {
             Ok(_) => {
                 self.logger.info("Browser opened successfully");
@@ -244,10 +249,8 @@ impl OAuthFlow {
 
         // For confidential clients, use HTTP Basic Auth
         if !is_public_client {
-            request_builder = request_builder.basic_auth(
-                &client_config.client_id,
-                Some(&client_config.client_secret),
-            );
+            request_builder = request_builder
+                .basic_auth(&client_config.client_id, Some(&client_config.client_secret));
         }
 
         let response = request_builder.send().await.map_err(|e| {
@@ -314,10 +317,8 @@ impl OAuthFlow {
 
         // For confidential clients, use HTTP Basic Auth
         if !is_public_client {
-            request_builder = request_builder.basic_auth(
-                &client_config.client_id,
-                Some(&client_config.client_secret),
-            );
+            request_builder = request_builder
+                .basic_auth(&client_config.client_id, Some(&client_config.client_secret));
         }
 
         let response = request_builder.send().await.map_err(|e| {

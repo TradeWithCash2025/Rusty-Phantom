@@ -21,9 +21,7 @@ use crate::utils::solana::get_solana_address;
 /// Default Solana RPC URLs keyed by canonical CAIP-2 network ID.
 fn default_rpc_url(network_id: &str) -> Option<&'static str> {
     match network_id {
-        s if s == NetworkId::SolanaMainnet.as_str() => {
-            Some("https://api.mainnet-beta.solana.com")
-        }
+        s if s == NetworkId::SolanaMainnet.as_str() => Some("https://api.mainnet-beta.solana.com"),
         s if s == NetworkId::SolanaDevnet.as_str() => Some("https://api.devnet.solana.com"),
         s if s == NetworkId::SolanaTestnet.as_str() => Some("https://api.testnet.solana.com"),
         _ => None,
@@ -110,7 +108,7 @@ async fn account_exists(
     )
     .await?;
 
-    Ok(!result.get("value").map_or(true, |v| v.is_null()))
+    Ok(!result.get("value").is_none_or(|v| v.is_null()))
 }
 
 /// Fetch SPL token mint decimals from chain.
@@ -151,23 +149,25 @@ const SYSTEM_PROGRAM_ID: [u8; 32] = [0u8; 32];
 
 // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 const TOKEN_PROGRAM_ID: [u8; 32] = [
-    0x06, 0xdd, 0xf6, 0xe1, 0xd7, 0x65, 0xa1, 0x93, 0xd9, 0xcb, 0xe1, 0x46, 0xce, 0xeb, 0x79,
-    0xac, 0x1c, 0xb4, 0x85, 0xed, 0x5f, 0x5b, 0x37, 0x91, 0x3a, 0x8c, 0xf5, 0x85, 0x7e, 0xff,
-    0x00, 0xa9,
+    0x06, 0xdd, 0xf6, 0xe1, 0xd7, 0x65, 0xa1, 0x93, 0xd9, 0xcb, 0xe1, 0x46, 0xce, 0xeb, 0x79, 0xac,
+    0x1c, 0xb4, 0x85, 0xed, 0x5f, 0x5b, 0x37, 0x91, 0x3a, 0x8c, 0xf5, 0x85, 0x7e, 0xff, 0x00, 0xa9,
 ];
 
 // ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
 const ASSOCIATED_TOKEN_PROGRAM_ID: [u8; 32] = [
-    0x8c, 0x97, 0x25, 0x8f, 0x4e, 0x24, 0x89, 0xf1, 0xbb, 0x3d, 0x10, 0x29, 0x14, 0x8e, 0x0d,
-    0x83, 0x0b, 0x5a, 0x13, 0x99, 0xda, 0xff, 0x10, 0x84, 0x04, 0x8e, 0x7b, 0xd8, 0xdb, 0xe9,
-    0xf8, 0x59,
+    0x8c, 0x97, 0x25, 0x8f, 0x4e, 0x24, 0x89, 0xf1, 0xbb, 0x3d, 0x10, 0x29, 0x14, 0x8e, 0x0d, 0x83,
+    0x0b, 0x5a, 0x13, 0x99, 0xda, 0xff, 0x10, 0x84, 0x04, 0x8e, 0x7b, 0xd8, 0xdb, 0xe9, 0xf8, 0x59,
 ];
 
 /// Decode a base58-encoded public key to 32 bytes.
 fn decode_pubkey(s: &str) -> Result<[u8; 32], Box<dyn std::error::Error + Send + Sync>> {
     let bytes = bs58::decode(s).into_vec()?;
     if bytes.len() != 32 {
-        return Err(format!("Invalid public key length: expected 32, got {}", bytes.len()).into());
+        return Err(format!(
+            "Invalid public key length: expected 32, got {}",
+            bytes.len()
+        )
+        .into());
     }
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
@@ -242,11 +242,7 @@ struct SolAccountMeta {
 }
 
 /// Build SystemProgram::Transfer instruction.
-fn system_transfer_instruction(
-    from: &[u8; 32],
-    to: &[u8; 32],
-    lamports: u64,
-) -> SolInstruction {
+fn system_transfer_instruction(from: &[u8; 32], to: &[u8; 32], lamports: u64) -> SolInstruction {
     // SystemProgram Transfer instruction index = 2 (little-endian u32)
     let mut data = Vec::with_capacity(12);
     data.extend_from_slice(&2u32.to_le_bytes());
@@ -439,14 +435,8 @@ fn serialize_transaction(
     accounts.insert(0, fee_payer_entry);
 
     let num_required_signatures = accounts.iter().filter(|(_, s, _)| *s).count() as u8;
-    let num_readonly_signed = accounts
-        .iter()
-        .filter(|(_, s, w)| *s && !*w)
-        .count() as u8;
-    let num_readonly_unsigned = accounts
-        .iter()
-        .filter(|(_, s, w)| !*s && !*w)
-        .count() as u8;
+    let num_readonly_signed = accounts.iter().filter(|(_, s, w)| *s && !*w).count() as u8;
+    let num_readonly_unsigned = accounts.iter().filter(|(_, s, w)| !*s && !*w).count() as u8;
 
     // 3. Build the message.
     let mut message = Vec::new();
@@ -658,27 +648,10 @@ async fn handle_transfer_tokens(
     // Build transaction instructions.
     let mut instructions: Vec<SolInstruction> = Vec::new();
 
-    if token_mint.is_none() {
-        // ---------------------------------------------------------------
-        // Native SOL transfer via SystemProgram
-        // ---------------------------------------------------------------
-        let lamports = if amount_unit == "base" {
-            parse_base_unit_amount(amount_str)?
-        } else {
-            parse_ui_amount(amount_str, 9 /* SOL decimals */)?
-        };
-        require_positive_amount(lamports)?;
-
-        instructions.push(system_transfer_instruction(
-            &from_pubkey,
-            &to_pubkey,
-            lamports as u64,
-        ));
-    } else {
+    if let Some(mint_str) = token_mint {
         // ---------------------------------------------------------------
         // SPL token transfer
         // ---------------------------------------------------------------
-        let mint_str = token_mint.unwrap();
         let mint_pubkey = decode_pubkey(mint_str)?;
 
         let source_ata = derive_ata(&from_pubkey, &mint_pubkey)?;
@@ -750,6 +723,22 @@ async fn handle_transfer_tokens(
                 decimals.unwrap() as u8,
             ));
         }
+    } else {
+        // ---------------------------------------------------------------
+        // Native SOL transfer via SystemProgram
+        // ---------------------------------------------------------------
+        let lamports = if amount_unit == "base" {
+            parse_base_unit_amount(amount_str)?
+        } else {
+            parse_ui_amount(amount_str, 9 /* SOL decimals */)?
+        };
+        require_positive_amount(lamports)?;
+
+        instructions.push(system_transfer_instruction(
+            &from_pubkey,
+            &to_pubkey,
+            lamports as u64,
+        ));
     }
 
     // Fetch recent blockhash and build the transaction.
@@ -769,10 +758,9 @@ async fn handle_transfer_tokens(
         })
         .await?;
 
-    context.logger.info(&format!(
-        "Transfer submitted for wallet {}",
-        wallet_id
-    ));
+    context
+        .logger
+        .info(&format!("Transfer submitted for wallet {}", wallet_id));
 
     Ok(json!({
         "walletId": wallet_id,

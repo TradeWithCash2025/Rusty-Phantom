@@ -42,10 +42,7 @@ impl SolanaEventListeners {
         let id = *next_id;
         *next_id += 1;
 
-        listeners
-            .entry(event)
-            .or_insert_with(Vec::new)
-            .push((id, callback));
+        listeners.entry(event).or_default().push((id, callback));
         id
     }
 

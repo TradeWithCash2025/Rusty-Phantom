@@ -7,12 +7,9 @@
 use phantom_api_key_stamper::{ApiKeyStamper, ApiKeyStamperConfig};
 use phantom_base64url::{base64url_encode, string_to_base64url};
 use phantom_client::{
-    CreateWalletResult, GetWalletsResult, PhantomClient, PhantomClientConfig,
-    WalletAddress,
+    CreateWalletResult, GetWalletsResult, PhantomClient, PhantomClientConfig, WalletAddress,
 };
-use phantom_constants::{
-    analytics::headers as analytics_headers, DEFAULT_WALLET_API_URL,
-};
+use phantom_constants::{analytics::headers as analytics_headers, DEFAULT_WALLET_API_URL};
 use phantom_constants::{Algorithm, DEFAULT_AUTHENTICATOR_ALGORITHM};
 use phantom_parsers::{
     parse_sign_message_response, parse_transaction_response, ParsedSignatureResult,
@@ -103,18 +100,12 @@ fn create_server_sdk_headers(app_id: &str) -> HashMap<String, String> {
         analytics_headers::SDK_VERSION.to_string(),
         SDK_VERSION.to_string(),
     );
-    headers.insert(
-        analytics_headers::PLATFORM.to_string(),
-        "rust".to_string(),
-    );
+    headers.insert(analytics_headers::PLATFORM.to_string(), "rust".to_string());
     headers.insert(
         analytics_headers::PLATFORM_VERSION.to_string(),
         "1.0".to_string(),
     );
-    headers.insert(
-        analytics_headers::APP_ID.to_string(),
-        app_id.to_string(),
-    );
+    headers.insert(analytics_headers::APP_ID.to_string(), app_id.to_string());
     headers
 }
 
@@ -208,8 +199,9 @@ impl ServerSdk {
         };
 
         let network_id: NetworkId =
-            serde_json::from_value(serde_json::Value::String(params.network_id))
-                .map_err(|e| phantom_client::ClientError::Config(format!("Invalid network ID: {}", e)))?;
+            serde_json::from_value(serde_json::Value::String(params.network_id)).map_err(|e| {
+                phantom_client::ClientError::Config(format!("Invalid network ID: {}", e))
+            })?;
 
         Ok(parse_sign_message_response(&raw_response, network_id))
     }
@@ -224,11 +216,15 @@ impl ServerSdk {
     ) -> Result<ParsedTransactionResult, phantom_client::ClientError> {
         // Parse the transaction to KMS format based on network type
         let transaction_input = classify_transaction_input(&params.transaction, &params.network_id);
-        let parsed = parse_to_kms_transaction(transaction_input, &params.network_id)
-            .map_err(|e| phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e)))?;
-        let transaction_payload = parsed
-            .parsed
-            .ok_or_else(|| phantom_client::ClientError::Config("Failed to parse transaction: no valid encoding found".to_string()))?;
+        let parsed =
+            parse_to_kms_transaction(transaction_input, &params.network_id).map_err(|e| {
+                phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e))
+            })?;
+        let transaction_payload = parsed.parsed.ok_or_else(|| {
+            phantom_client::ClientError::Config(
+                "Failed to parse transaction: no valid encoding found".to_string(),
+            )
+        })?;
 
         let raw_response = self
             .client
@@ -242,8 +238,9 @@ impl ServerSdk {
             .await?;
 
         let network_id: NetworkId =
-            serde_json::from_value(serde_json::Value::String(params.network_id))
-                .map_err(|e| phantom_client::ClientError::Config(format!("Invalid network ID: {}", e)))?;
+            serde_json::from_value(serde_json::Value::String(params.network_id)).map_err(|e| {
+                phantom_client::ClientError::Config(format!("Invalid network ID: {}", e))
+            })?;
 
         Ok(parse_transaction_response(
             &raw_response.raw_transaction,
@@ -262,11 +259,15 @@ impl ServerSdk {
     ) -> Result<ParsedTransactionResult, phantom_client::ClientError> {
         // Parse the transaction to KMS format based on network type
         let transaction_input = classify_transaction_input(&params.transaction, &params.network_id);
-        let parsed = parse_to_kms_transaction(transaction_input, &params.network_id)
-            .map_err(|e| phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e)))?;
-        let transaction_payload = parsed
-            .parsed
-            .ok_or_else(|| phantom_client::ClientError::Config("Failed to parse transaction: no valid encoding found".to_string()))?;
+        let parsed =
+            parse_to_kms_transaction(transaction_input, &params.network_id).map_err(|e| {
+                phantom_client::ClientError::Config(format!("Failed to parse transaction: {}", e))
+            })?;
+        let transaction_payload = parsed.parsed.ok_or_else(|| {
+            phantom_client::ClientError::Config(
+                "Failed to parse transaction: no valid encoding found".to_string(),
+            )
+        })?;
 
         let raw_response = self
             .client
@@ -280,8 +281,9 @@ impl ServerSdk {
             .await?;
 
         let network_id: NetworkId =
-            serde_json::from_value(serde_json::Value::String(params.network_id))
-                .map_err(|e| phantom_client::ClientError::Config(format!("Invalid network ID: {}", e)))?;
+            serde_json::from_value(serde_json::Value::String(params.network_id)).map_err(|e| {
+                phantom_client::ClientError::Config(format!("Invalid network ID: {}", e))
+            })?;
 
         Ok(parse_transaction_response(
             &raw_response.raw_transaction,
@@ -319,8 +321,11 @@ impl ServerSdk {
             Some(Arc::new(temp_stamper)),
         );
 
-        let base64url_public_key =
-            base64url_encode(&bs58::decode(&key_pair.public_key).into_vec().unwrap_or_default());
+        let base64url_public_key = base64url_encode(
+            &bs58::decode(&key_pair.public_key)
+                .into_vec()
+                .unwrap_or_default(),
+        );
 
         // Read the algorithm from the stamper if available, otherwise use default
         let algorithm = match self
@@ -382,18 +387,14 @@ impl ServerSdk {
 }
 
 // Re-export from dependencies for convenience (matches TS re-exports)
-pub use phantom_client::{
-    self,
-    derive_submission_config, get_client_network_config, get_derivation_path_for_network,
-    get_network_description, get_network_ids_by_chain, get_supported_network_ids,
-    supports_transaction_submission, AddressFormat, ClientAlgorithm, ClientNetworkConfig,
-    Curve, DerivationPath, NetworkId as ClientNetworkId,
-    SignedTransactionResult, Transaction, Wallet,
-};
 pub use phantom_api_key_stamper::{self as api_key_stamper, ApiKeyStamper as ApiKeyStamperExport};
+pub use phantom_client::{
+    self, derive_submission_config, get_client_network_config, get_derivation_path_for_network,
+    get_network_description, get_network_ids_by_chain, get_supported_network_ids,
+    supports_transaction_submission, AddressFormat, ClientAlgorithm, ClientNetworkConfig, Curve,
+    DerivationPath, NetworkId as ClientNetworkId, SignedTransactionResult, Transaction, Wallet,
+};
 pub use phantom_constants::NetworkId;
 pub use phantom_crypto::generate_key_pair;
 // Re-export transaction parsing utilities (matches TS re-export of parseToKmsTransaction)
-pub use phantom_parsers::{
-    parse_to_kms_transaction, ParsedTransaction, TransactionInput,
-};
+pub use phantom_parsers::{parse_to_kms_transaction, ParsedTransaction, TransactionInput};

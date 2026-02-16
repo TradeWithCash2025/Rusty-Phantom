@@ -5,8 +5,8 @@
 //! that bridges a Wallet Standard wallet to the [`SolanaChain`] trait interface.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 use phantom_chain_interfaces::{
     SolanaChain, SolanaConnectOptions, SolanaConnectResult, SolanaNetwork,
@@ -238,8 +238,7 @@ impl SolanaChain for WalletStandardSolanaAdapter {
             None
         };
 
-        let account = first_account
-            .ok_or("No accounts available after connecting to wallet")?;
+        let account = first_account.ok_or("No accounts available after connecting to wallet")?;
 
         let address = account.address.clone();
         if address.is_empty() {
@@ -265,6 +264,10 @@ impl SolanaChain for WalletStandardSolanaAdapter {
         }
 
         Ok(())
+    }
+
+    async fn get_account(&self) -> Option<String> {
+        self.public_key.read().ok().and_then(|pk| pk.clone())
     }
 
     async fn sign_message(
@@ -415,10 +418,7 @@ pub fn handle_wallet_standard_change(
                 if let Ok(mut pk) = adapter.public_key.write() {
                     *pk = Some(address.clone());
                 }
-                adapter.emit(
-                    "accountChanged",
-                    serde_json::Value::String(address.clone()),
-                );
+                adapter.emit("accountChanged", serde_json::Value::String(address.clone()));
                 adapter.emit("connect", serde_json::Value::String(address));
             } else {
                 if let Ok(mut pk) = adapter.public_key.write() {

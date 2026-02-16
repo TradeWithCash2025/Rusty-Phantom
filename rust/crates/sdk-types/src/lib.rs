@@ -45,7 +45,10 @@ pub enum StamperType {
 #[async_trait::async_trait]
 pub trait Stamper: Send + Sync {
     /// Sign data and produce a stamp header value.
-    async fn stamp(&self, params: StampParams) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
+    async fn stamp(
+        &self,
+        params: StampParams,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
 
     /// The cryptographic algorithm used by this stamper.
     fn algorithm(&self) -> Algorithm;
@@ -98,16 +101,23 @@ pub trait StamperWithKeyManagement: Stamper {
     fn get_key_info(&self) -> Option<StamperKeyInfo>;
 
     /// Reset the keypair, generating a new one.
-    async fn reset_key_pair(&self) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>>;
+    async fn reset_key_pair(
+        &self,
+    ) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Clear all stored key material.
     async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Generate a new keypair for rotation, keeping the old one as pending.
-    async fn rotate_key_pair(&self) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>>;
+    async fn rotate_key_pair(
+        &self,
+    ) -> Result<StamperKeyInfo, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Commit the pending rotation, switching to the new keypair.
-    async fn commit_rotation(&self, authenticator_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn commit_rotation(
+        &self,
+        authenticator_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Roll back the pending rotation, discarding the new keypair.
     async fn rollback_rotation(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

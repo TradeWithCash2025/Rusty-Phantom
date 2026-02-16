@@ -209,8 +209,7 @@ impl EthereumStrategy for InjectedEthereumStrategy {
 
         match provider.request(method, None).await {
             Ok(val) => {
-                let accounts: Vec<String> =
-                    serde_json::from_value(val).unwrap_or_default();
+                let accounts: Vec<String> = serde_json::from_value(val).unwrap_or_default();
                 Ok(Some(accounts))
             }
             Err(_) => Ok(None),
@@ -249,10 +248,7 @@ impl EthereumStrategy for InjectedEthereumStrategy {
             serde_json::Value::String(message.to_string()),
         ];
         let result = provider.request("eth_sign", Some(&params)).await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn sign_personal_message(
@@ -270,10 +266,7 @@ impl EthereumStrategy for InjectedEthereumStrategy {
             serde_json::Value::String(address.to_string()),
         ];
         let result = provider.request("personal_sign", Some(&params)).await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn sign_typed_data(
@@ -293,10 +286,7 @@ impl EthereumStrategy for InjectedEthereumStrategy {
         let result = provider
             .request("eth_signTypedData_v4", Some(&params))
             .await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn sign_in(
@@ -305,12 +295,10 @@ impl EthereumStrategy for InjectedEthereumStrategy {
     ) -> Result<EthereumSignInResult, Box<dyn std::error::Error + Send + Sync>> {
         let provider = self.require_provider()?;
 
-        let message =
-            create_siwe_message(sign_in_data).map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        let message = create_siwe_message(sign_in_data)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
 
-        let address = provider
-            .selected_address()
-            .ok_or("No address available.")?;
+        let address = provider.selected_address().ok_or("No address available.")?;
 
         let signature = self.sign_personal_message(&message, &address).await?;
 
@@ -334,10 +322,7 @@ impl EthereumStrategy for InjectedEthereumStrategy {
         let result = provider
             .request("eth_sendTransaction", Some(&params))
             .await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn sign_transaction(
@@ -353,19 +338,13 @@ impl EthereumStrategy for InjectedEthereumStrategy {
         let result = provider
             .request("eth_signTransaction", Some(&params))
             .await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn get_chain_id(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let provider = self.require_provider()?;
         let result = provider.request("eth_chainId", None).await?;
-        Ok(result
-            .as_str()
-            .unwrap_or_default()
-            .to_string())
+        Ok(result.as_str().unwrap_or_default().to_string())
     }
 
     async fn switch_chain(

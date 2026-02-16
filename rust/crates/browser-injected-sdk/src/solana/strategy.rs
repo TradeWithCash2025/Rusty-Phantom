@@ -190,7 +190,9 @@ impl InjectedSolanaStrategy {
         Err("Provider not found.".into())
     }
 
-    fn require_provider(&self) -> Result<&Arc<dyn PhantomSolanaProvider>, Box<dyn std::error::Error + Send + Sync>> {
+    fn require_provider(
+        &self,
+    ) -> Result<&Arc<dyn PhantomSolanaProvider>, Box<dyn std::error::Error + Send + Sync>> {
         self.provider
             .as_ref()
             .ok_or_else(|| "Provider not found.".into())

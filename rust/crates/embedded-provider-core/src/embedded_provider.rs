@@ -123,9 +123,39 @@ impl EmbeddedProvider {
         client.is_some() && wallet_id.is_some()
     }
 
+    /// Synchronous best-effort connectivity check.
+    ///
+    /// Uses `try_read()` on the internal locks and returns `false` if the
+    /// locks are currently held by another task. This is intended for use in
+    /// synchronous trait methods (e.g. `EthereumChain::is_connected`).
+    pub fn is_connected_sync(&self) -> bool {
+        let client_ok = self
+            .client
+            .try_read()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false);
+        let wallet_ok = self
+            .wallet_id
+            .try_read()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false);
+        client_ok && wallet_ok
+    }
+
     /// Get the current wallet addresses.
     pub async fn get_addresses(&self) -> Vec<WalletAddress> {
         self.addresses.read().await.clone()
+    }
+
+    /// Synchronous best-effort access to the current wallet addresses.
+    ///
+    /// Uses `try_read()` on the internal lock to avoid blocking. Returns
+    /// an empty `Vec` if the lock is currently held by another task.
+    pub fn get_addresses_sync(&self) -> Vec<WalletAddress> {
+        self.addresses
+            .try_read()
+            .map(|g| g.clone())
+            .unwrap_or_default()
     }
 
     /// Auto-connect using an existing valid session.

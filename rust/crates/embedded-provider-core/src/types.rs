@@ -84,6 +84,9 @@ pub type SignedTransaction = ParsedTransactionResult;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectStartEventData {
     pub provider: EmbeddedProviderAuthType,
+    /// Source of the connection attempt (e.g. "auto-connect", "manual-connect").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Event data emitted on successful connection.
@@ -93,6 +96,10 @@ pub struct ConnectEventData {
     pub addresses: Vec<WalletAddress>,
     pub auth_provider: EmbeddedProviderAuthType,
     pub auth_user_id: Option<String>,
+    /// Source of the connection (e.g. "auto-connect", "manual-connect",
+    /// "manual-existing", "existing-session", "manual").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Event data emitted on connection error.
@@ -100,12 +107,18 @@ pub struct ConnectEventData {
 pub struct ConnectErrorEventData {
     pub error: String,
     pub provider: Option<EmbeddedProviderAuthType>,
+    /// Source of the connection error (e.g. "auto-connect", "manual-connect").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Event data emitted on disconnect.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisconnectEventData {
     pub wallet_id: Option<String>,
+    /// Source of the disconnect (e.g. "manual").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Authentication provider type.

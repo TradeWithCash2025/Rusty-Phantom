@@ -130,14 +130,11 @@ impl Provider for BrowserEmbeddedProvider {
     }
 
     fn get_addresses(&self) -> Vec<WalletAddress> {
-        // get_addresses is async on core, but we need sync here.
-        // Return empty and let callers use async version when needed.
-        vec![]
+        self.core.get_addresses_sync()
     }
 
     fn is_connected(&self) -> bool {
-        // is_connected is async on core, same approach.
-        false
+        self.core.is_connected_sync()
     }
 
     async fn auto_connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

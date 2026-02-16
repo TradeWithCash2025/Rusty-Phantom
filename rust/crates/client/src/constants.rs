@@ -101,6 +101,7 @@ pub fn get_derivation_path_for_network(network_id: &str, account_index: u32) -> 
         "solana" => DerivationPath::solana(account_index),
         "sui" => DerivationPath::sui(account_index),
         "bitcoin" | "btc" | "bip122" => DerivationPath::bitcoin(account_index),
+        "eip155" | "ethereum" | "eth" => DerivationPath::ethereum(account_index),
         // Default to Ethereum path for all EVM-compatible chains
         _ => DerivationPath::ethereum(account_index),
     }
@@ -149,7 +150,7 @@ pub fn get_client_network_config(
             algorithm: ClientAlgorithm::Secp256k1,
             address_format: AddressFormat::BitcoinSegwit,
         }),
-        "eip155" => Some(ClientNetworkConfig {
+        "eip155" | "ethereum" | "eth" => Some(ClientNetworkConfig {
             derivation_path: DerivationPath::ethereum(account_index),
             curve: Curve::Secp256k1,
             algorithm: ClientAlgorithm::Secp256k1,

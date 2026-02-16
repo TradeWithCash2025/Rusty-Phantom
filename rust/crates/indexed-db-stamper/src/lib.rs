@@ -68,6 +68,10 @@ pub struct KeyPairRecord {
     pub expires_at: u64,
     pub authenticator_id: Option<String>,
     pub status: KeyPairStatus,
+    /// The algorithm used to generate this key pair.
+    /// Optional for backward compatibility with records created before this field was added.
+    #[serde(default)]
+    pub algorithm: Option<Algorithm>,
 }
 
 /// Configuration for the IndexedDB stamper.
@@ -213,13 +217,12 @@ impl IndexedDbStamper {
 
         let public_key_base58 = bs58::encode(&public_key_bytes).into_string();
 
-        // Create deterministic key ID from public key hash
+        // Create deterministic key ID from SHA-256 hash of public key, base64url-encoded, first 16 chars
         let key_id = {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            public_key_bytes.hash(&mut hasher);
-            format!("{:016x}", hasher.finish())
+            use sha2::{Sha256, Digest};
+            let hash = Sha256::digest(&public_key_bytes);
+            let encoded = phantom_base64url::base64url_encode(&hash);
+            encoded[..16].to_string()
         };
 
         let now = std::time::SystemTime::now()
@@ -240,6 +243,7 @@ impl IndexedDbStamper {
             expires_at: 0,
             authenticator_id: None,
             status,
+            algorithm: Some(algorithm),
         };
 
         let storage_key = match status {
@@ -289,31 +293,26 @@ impl Stamper for IndexedDbStamper {
         let pub_key_bytes = bs58::decode(&record_clone.key_info.public_key).into_vec()?;
         let pub_key_base64url = phantom_base64url::base64url_encode(&pub_key_bytes);
 
-        let stamp_data = match self.config.stamper_type {
-            StamperType::Pki => {
+        let algorithm_str = serde_json::to_value(algorithm)?;
+
+        let stamp_data = match &params {
+            StampParams::Pki { .. } => {
                 serde_json::json!({
                     "publicKey": pub_key_base64url,
                     "signature": signature_base64url,
                     "kind": "PKI",
-                    "algorithm": format!("{:?}", algorithm),
+                    "algorithm": algorithm_str,
                 })
             }
-            StamperType::Oidc => {
-                let (id_token, salt) = match &params {
-                    StampParams::Oidc {
-                        id_token, salt, ..
-                    } => (id_token.clone(), salt.clone()),
-                    _ => (
-                        self.config.id_token.clone().unwrap_or_default(),
-                        self.config.salt.clone().unwrap_or_default(),
-                    ),
-                };
+            StampParams::Oidc {
+                id_token, salt, ..
+            } => {
                 serde_json::json!({
                     "kind": "OIDC",
                     "idToken": id_token,
                     "publicKey": pub_key_base64url,
                     "salt": salt,
-                    "algorithm": format!("{:?}", algorithm),
+                    "algorithm": algorithm_str,
                     "signature": signature_base64url,
                 })
             }
@@ -356,6 +355,10 @@ impl StamperWithKeyManagement for IndexedDbStamper {
         if let Some(record) = self.storage.load(&active_key).await? {
             let key_info = record.0.key_info.clone();
             let mut state = self.state.write().await;
+            // Restore algorithm from the stored record if available
+            if let Some(alg) = record.0.algorithm {
+                state.algorithm = alg;
+            }
             state.active_record = Some(record);
             drop(state);
 

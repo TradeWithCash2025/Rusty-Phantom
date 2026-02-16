@@ -6,7 +6,7 @@
 //! `packages/browser-sdk/src/providers/injected/chains/InjectedWalletEthereumChain.ts`.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use phantom_chain_interfaces::{EthTransactionRequest, EthereumChain};
@@ -52,7 +52,70 @@ impl EventListenerRegistry {
             }
         }
     }
+
+    /// Emit an event, invoking all registered listeners with the given data.
+    fn emit(&self, event: &str, data: serde_json::Value) {
+        let map = self.listeners.lock().unwrap();
+        if let Some(list) = map.get(event) {
+            for (_, cb) in list {
+                let cb = cb.clone();
+                let data = data.clone();
+                if let Err(e) =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || cb(data)))
+                {
+                    tracing::error!("Error in '{}' event listener: {:?}", event, e);
+                }
+            }
+        }
+    }
 }
+
+// ============================================================================
+// Helper: extract an error code from a boxed error.
+//
+// Provider errors typically contain a JSON-RPC `code` field.  We try:
+//   1. Down-casting to `serde_json::Value` in case the error wraps one.
+//   2. Searching the `Display` representation for `"code":4100` or similar.
+//
+// This is intentionally best-effort -- if the provider uses a different error
+// representation we simply will not retry.
+// ============================================================================
+
+fn extract_error_code(err: &(dyn std::error::Error + Send + Sync)) -> Option<i64> {
+    // Check Display output for a JSON code field.
+    let msg = err.to_string();
+    // Try simple pattern: "code": 4100 or "code":4100
+    if let Some(pos) = msg.find("\"code\"") {
+        let after = &msg[pos + 6..];
+        // Skip optional whitespace and colon
+        let after = after.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+        if let Some(end) = after.find(|c: char| !c.is_ascii_digit() && c != '-') {
+            if let Ok(code) = after[..end].parse::<i64>() {
+                return Some(code);
+            }
+        } else if let Ok(code) = after.parse::<i64>() {
+            return Some(code);
+        }
+    }
+    // Fallback: look for "4100" anywhere preceded by common patterns.
+    // This handles messages like "Error 4100: Unauthorized" or "code 4100".
+    for pattern in &["code 4100", "code: 4100", "error 4100", "Error(4100"] {
+        if msg.contains(pattern) {
+            return Some(4100);
+        }
+    }
+    None
+}
+
+/// Methods that require authorisation (the wallet must be connected).
+const AUTH_METHODS: &[&str] = &[
+    "personal_sign",
+    "eth_sign",
+    "eth_signTypedData",
+    "eth_signTypedData_v4",
+    "eth_sendTransaction",
+    "eth_signTransaction",
+];
 
 // ============================================================================
 // InjectedWalletEthereumChain
@@ -70,6 +133,8 @@ pub struct InjectedWalletEthereumChain {
     wallet_id: String,
     /// Human-readable wallet name (e.g. "Phantom", "MetaMask").
     wallet_name: String,
+    /// Whether we believe the wallet is connected.
+    connected: AtomicBool,
     /// Cached chain ID so `chain_id()` can return `&str`.
     chain_id_cache: Mutex<String>,
     /// Cached accounts so `accounts()` can return `&[String]`.
@@ -80,19 +145,25 @@ pub struct InjectedWalletEthereumChain {
 
 impl InjectedWalletEthereumChain {
     /// Create a new `InjectedWalletEthereumChain` wrapping the given provider.
-    pub fn new(inner: Arc<dyn EthereumChain>, wallet_id: String, wallet_name: String) -> Self {
+    pub fn new(inner: Arc<dyn EthereumChain>, wallet_id: String, wallet_name: String) -> Arc<Self> {
         // Seed the caches from the inner provider.
+        let initial_accounts: Vec<String> = inner.accounts().to_vec();
+        let connected = AtomicBool::new(!initial_accounts.is_empty());
         let chain_id_cache = Mutex::new(inner.chain_id().to_string());
-        let accounts_cache = Mutex::new(inner.accounts().to_vec());
+        let accounts_cache = Mutex::new(initial_accounts);
 
-        Self {
+        let this = Arc::new(Self {
             inner,
             wallet_id,
             wallet_name,
+            connected,
             chain_id_cache,
             accounts_cache,
             events: EventListenerRegistry::new(),
-        }
+        });
+
+        this.setup_event_listeners();
+        this
     }
 
     /// Refresh the chain ID cache from the inner provider.
@@ -103,6 +174,76 @@ impl InjectedWalletEthereumChain {
     /// Refresh the accounts cache from the inner provider.
     fn refresh_accounts_cache(&self) {
         *self.accounts_cache.lock().unwrap() = self.inner.accounts().to_vec();
+    }
+
+    /// Register listeners on the inner provider to update local state and
+    /// re-emit events through our own registry. Mirrors `setupEventListeners`
+    /// in the TypeScript implementation.
+    fn setup_event_listeners(self: &Arc<Self>) {
+        // "connect" -- update connected flag and chain ID cache.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "connect",
+                Box::new(move |value| {
+                    this.connected.store(true, Ordering::Relaxed);
+                    // The value should contain a `chainId` field.
+                    if let Some(chain_id) = value.get("chainId").and_then(|v| v.as_str()) {
+                        *this.chain_id_cache.lock().unwrap() = chain_id.to_string();
+                    }
+                    this.events.emit("connect", value);
+                }),
+            );
+        }
+
+        // "disconnect" -- clear connected flag and accounts.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "disconnect",
+                Box::new(move |value| {
+                    this.connected.store(false, Ordering::Relaxed);
+                    *this.accounts_cache.lock().unwrap() = Vec::new();
+                    this.events.emit("disconnect", value);
+                    this.events
+                        .emit("accountsChanged", serde_json::Value::Array(vec![]));
+                }),
+            );
+        }
+
+        // "accountsChanged" -- update accounts cache and connected flag.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "accountsChanged",
+                Box::new(move |value| {
+                    if let Some(arr) = value.as_array() {
+                        let accounts: Vec<String> = arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect();
+                        this.connected
+                            .store(!accounts.is_empty(), Ordering::Relaxed);
+                        *this.accounts_cache.lock().unwrap() = accounts;
+                    }
+                    this.events.emit("accountsChanged", value);
+                }),
+            );
+        }
+
+        // "chainChanged" -- update chain ID cache.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "chainChanged",
+                Box::new(move |value| {
+                    if let Some(chain_id) = value.as_str() {
+                        *this.chain_id_cache.lock().unwrap() = chain_id.to_string();
+                    }
+                    this.events.emit("chainChanged", value);
+                }),
+            );
+        }
     }
 }
 
@@ -137,6 +278,21 @@ impl EthereumChain for InjectedWalletEthereumChain {
             "External wallet Ethereum request"
         );
 
+        // For methods that require authorization, ensure we're connected first.
+        if AUTH_METHODS.contains(&method) {
+            let needs_connect = !self.connected.load(Ordering::Relaxed)
+                || self.accounts_cache.lock().unwrap().is_empty();
+            if needs_connect {
+                tracing::info!(
+                    wallet_id = %self.wallet_id,
+                    wallet_name = %self.wallet_name,
+                    method = %method,
+                    "Method requires authorization, ensuring connection"
+                );
+                self.connect().await?;
+            }
+        }
+
         match self.inner.request(method, params).await {
             Ok(result) => {
                 tracing::info!(
@@ -148,6 +304,57 @@ impl EthereumChain for InjectedWalletEthereumChain {
                 Ok(result)
             }
             Err(e) => {
+                // If we get 4100 (Unauthorized), try to re-authorize and retry once.
+                if extract_error_code(e.as_ref()) == Some(4100) {
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        method = %method,
+                        "Got 4100 Unauthorized, attempting to re-authorize"
+                    );
+                    let reauth_params: &[serde_json::Value] = &[];
+                    match self
+                        .inner
+                        .request("eth_requestAccounts", Some(reauth_params))
+                        .await
+                    {
+                        Ok(_) => {
+                            // Retry the original request.
+                            match self.inner.request(method, params).await {
+                                Ok(result) => {
+                                    tracing::info!(
+                                        wallet_id = %self.wallet_id,
+                                        wallet_name = %self.wallet_name,
+                                        method = %method,
+                                        "External wallet Ethereum request success (after re-auth)"
+                                    );
+                                    return Ok(result);
+                                }
+                                Err(retry_err) => {
+                                    tracing::error!(
+                                        wallet_id = %self.wallet_id,
+                                        wallet_name = %self.wallet_name,
+                                        method = %method,
+                                        error = %retry_err,
+                                        "Failed after re-authorization"
+                                    );
+                                    return Err(retry_err);
+                                }
+                            }
+                        }
+                        Err(reauth_err) => {
+                            tracing::error!(
+                                wallet_id = %self.wallet_id,
+                                wallet_name = %self.wallet_name,
+                                method = %method,
+                                error = %reauth_err,
+                                "Re-authorization request failed"
+                            );
+                            return Err(reauth_err);
+                        }
+                    }
+                }
+
                 tracing::error!(
                     wallet_id = %self.wallet_id,
                     wallet_name = %self.wallet_name,
@@ -169,6 +376,8 @@ impl EthereumChain for InjectedWalletEthereumChain {
 
         match self.inner.connect().await {
             Ok(accounts) => {
+                self.connected
+                    .store(!accounts.is_empty(), Ordering::Relaxed);
                 *self.accounts_cache.lock().unwrap() = accounts.clone();
                 self.refresh_chain_id_cache();
                 tracing::info!(
@@ -200,6 +409,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
 
         match self.inner.disconnect().await {
             Ok(()) => {
+                self.connected.store(false, Ordering::Relaxed);
                 *self.accounts_cache.lock().unwrap() = Vec::new();
                 tracing::info!(
                     wallet_id = %self.wallet_id,
@@ -240,6 +450,8 @@ impl EthereumChain for InjectedWalletEthereumChain {
             "External wallet Ethereum signPersonalMessage"
         );
 
+        // Try the direct trait method first; fall back to request("personal_sign")
+        // if the inner provider does not support it.
         match self.inner.sign_personal_message(message, address).await {
             Ok(sig) => {
                 tracing::info!(
@@ -251,13 +463,39 @@ impl EthereumChain for InjectedWalletEthereumChain {
                 Ok(sig)
             }
             Err(e) => {
-                tracing::error!(
-                    wallet_id = %self.wallet_id,
-                    wallet_name = %self.wallet_name,
-                    error = %e,
-                    "External wallet Ethereum signPersonalMessage failed"
-                );
-                Err(e)
+                // Check if the error indicates the method is unsupported.
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "signPersonalMessage unsupported, falling back to request(\"personal_sign\")"
+                    );
+                    let params = vec![
+                        serde_json::Value::String(message.to_string()),
+                        serde_json::Value::String(address.to_string()),
+                    ];
+                    let result = self.request("personal_sign", Some(&params)).await?;
+                    let sig = result
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| result.to_string());
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        signature_length = sig.len(),
+                        "External wallet Ethereum signPersonalMessage success (via fallback)"
+                    );
+                    Ok(sig)
+                } else {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        error = %e,
+                        "External wallet Ethereum signPersonalMessage failed"
+                    );
+                    Err(e)
+                }
             }
         }
     }
@@ -274,6 +512,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
             "External wallet Ethereum signTypedData"
         );
 
+        // Try the direct trait method first; fall back to request("eth_signTypedData_v4").
         match self.inner.sign_typed_data(typed_data, address).await {
             Ok(sig) => {
                 tracing::info!(
@@ -285,13 +524,40 @@ impl EthereumChain for InjectedWalletEthereumChain {
                 Ok(sig)
             }
             Err(e) => {
-                tracing::error!(
-                    wallet_id = %self.wallet_id,
-                    wallet_name = %self.wallet_name,
-                    error = %e,
-                    "External wallet Ethereum signTypedData failed"
-                );
-                Err(e)
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "signTypedData unsupported, falling back to request(\"eth_signTypedData_v4\")"
+                    );
+                    let params = vec![
+                        serde_json::Value::String(address.to_string()),
+                        typed_data.clone(),
+                    ];
+                    let result = self
+                        .request("eth_signTypedData_v4", Some(&params))
+                        .await?;
+                    let sig = result
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| result.to_string());
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        signature_length = sig.len(),
+                        "External wallet Ethereum signTypedData success (via fallback)"
+                    );
+                    Ok(sig)
+                } else {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        error = %e,
+                        "External wallet Ethereum signTypedData failed"
+                    );
+                    Err(e)
+                }
             }
         }
     }
@@ -308,6 +574,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
             "External wallet Ethereum signTransaction"
         );
 
+        // Try the direct trait method first; fall back to request("eth_signTransaction").
         match self.inner.sign_transaction(transaction).await {
             Ok(sig) => {
                 tracing::info!(
@@ -319,13 +586,38 @@ impl EthereumChain for InjectedWalletEthereumChain {
                 Ok(sig)
             }
             Err(e) => {
-                tracing::error!(
-                    wallet_id = %self.wallet_id,
-                    wallet_name = %self.wallet_name,
-                    error = %e,
-                    "External wallet Ethereum signTransaction failed"
-                );
-                Err(e)
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "signTransaction unsupported, falling back to request(\"eth_signTransaction\")"
+                    );
+                    let tx_value = serde_json::to_value(transaction)?;
+                    let params = vec![tx_value];
+                    let result = self
+                        .request("eth_signTransaction", Some(&params))
+                        .await?;
+                    let sig = result
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| result.to_string());
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        signature_length = sig.len(),
+                        "External wallet Ethereum signTransaction success (via fallback)"
+                    );
+                    Ok(sig)
+                } else {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        error = %e,
+                        "External wallet Ethereum signTransaction failed"
+                    );
+                    Err(e)
+                }
             }
         }
     }
@@ -343,6 +635,7 @@ impl EthereumChain for InjectedWalletEthereumChain {
             "External wallet Ethereum sendTransaction"
         );
 
+        // Try the direct trait method first; fall back to request("eth_sendTransaction").
         match self.inner.send_transaction(transaction).await {
             Ok(tx_hash) => {
                 tracing::info!(
@@ -354,13 +647,38 @@ impl EthereumChain for InjectedWalletEthereumChain {
                 Ok(tx_hash)
             }
             Err(e) => {
-                tracing::error!(
-                    wallet_id = %self.wallet_id,
-                    wallet_name = %self.wallet_name,
-                    error = %e,
-                    "External wallet Ethereum sendTransaction failed"
-                );
-                Err(e)
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unsupported") || msg.contains("not implemented") || msg.contains("not supported") {
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "sendTransaction unsupported, falling back to request(\"eth_sendTransaction\")"
+                    );
+                    let tx_value = serde_json::to_value(transaction)?;
+                    let params = vec![tx_value];
+                    let result = self
+                        .request("eth_sendTransaction", Some(&params))
+                        .await?;
+                    let tx_hash = result
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| result.to_string());
+                    tracing::info!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        tx_hash = %tx_hash,
+                        "External wallet Ethereum sendTransaction success (via fallback)"
+                    );
+                    Ok(tx_hash)
+                } else {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        error = %e,
+                        "External wallet Ethereum sendTransaction failed"
+                    );
+                    Err(e)
+                }
             }
         }
     }
@@ -412,24 +730,17 @@ impl EthereumChain for InjectedWalletEthereumChain {
     }
 
     fn is_connected(&self) -> bool {
-        self.inner.is_connected()
+        self.connected.load(Ordering::Relaxed)
     }
 
     fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
-        // Register on both the local registry and the inner provider so that
-        // events emitted by either side reach the caller.
-        let local_id = self.events.add(event, listener);
-        // Forward to inner provider as well (fire-and-forget, we track via
-        // local_id only).
-        let inner_listener: Box<dyn Fn(serde_json::Value) + Send + Sync> =
-            Box::new(|_| { /* forwarded via inner */ });
-        let _inner_id = self.inner.on(event, inner_listener);
-        local_id
+        // Register on the local registry only.  Events from the inner provider
+        // are forwarded to local listeners via `setup_event_listeners`, so
+        // callers receive events regardless of origin.
+        self.events.add(event, listener)
     }
 
     fn off(&self, event: &str, listener_id: u64) {
         self.events.remove(event, listener_id);
-        // Also forward removal to inner provider.
-        self.inner.off(event, listener_id);
     }
 }

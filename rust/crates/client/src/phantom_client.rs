@@ -518,6 +518,16 @@ impl PhantomClient {
             validate_name_length(&params.authenticator_name, "Authenticator")?;
         }
 
+        // Validate the nested authenticator's own name (mirrors TS params.authenticator?.authenticatorName check)
+        let nested_auth_name = match &params.authenticator {
+            AuthenticatorConfig::Keypair { authenticator_name, .. }
+            | AuthenticatorConfig::Passkey { authenticator_name, .. }
+            | AuthenticatorConfig::Oidc { authenticator_name, .. } => authenticator_name,
+        };
+        if !nested_auth_name.is_empty() {
+            validate_name_length(nested_auth_name, "Authenticator")?;
+        }
+
         let request = serde_json::json!({
             "method": "createAuthenticator",
             "params": {

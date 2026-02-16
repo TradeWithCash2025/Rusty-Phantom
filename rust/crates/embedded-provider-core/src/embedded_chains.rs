@@ -112,16 +112,27 @@ pub struct EmbeddedEthereumChain {
 impl EmbeddedEthereumChain {
     /// Create a new `EmbeddedEthereumChain` wrapping the given provider.
     ///
-    /// If the provider is already connected, the chain will synchronise its
-    /// initial state (accounts, chain ID) eagerly.
+    /// This does **not** perform initial state synchronisation. Call
+    /// [`sync_accounts`](Self::sync_accounts) after construction (or use
+    /// [`new_initialized`](Self::new_initialized) instead) to eagerly
+    /// populate accounts from the provider.
     pub fn new(provider: Arc<EmbeddedProvider>) -> Self {
-        let chain = Self {
+        Self {
             provider,
             current_network_id: Mutex::new(NetworkId::EthereumMainnet),
             accounts: Mutex::new(Vec::new()),
             chain_id_cache: Mutex::new("0x1".to_string()),
             events: EventListenerRegistry::new(),
-        };
+        }
+    }
+
+    /// Create a new `EmbeddedEthereumChain` and synchronise initial state.
+    ///
+    /// This is the async equivalent of the TypeScript constructor which calls
+    /// `syncInitialState()` to eagerly populate accounts from the provider.
+    pub async fn new_initialized(provider: Arc<EmbeddedProvider>) -> Self {
+        let chain = Self::new(provider);
+        chain.sync_accounts().await;
         chain
     }
 
@@ -295,7 +306,7 @@ impl EthereumChain for EmbeddedEthereumChain {
     }
 
     async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.provider.disconnect(false).await?;
+        self.provider.disconnect(true).await?;
         *self.accounts.lock().unwrap() = Vec::new();
         self.events.emit(
             "disconnect",
@@ -317,7 +328,7 @@ impl EthereumChain for EmbeddedEthereumChain {
         let network_id = *self.current_network_id.lock().unwrap();
         let result = self
             .provider
-            .sign_message(&crate::types::SignMessageParams {
+            .sign_ethereum_message(&crate::types::SignMessageParams {
                 message: message.to_string(),
                 network_id: network_id.to_string(),
             })
@@ -434,8 +445,7 @@ impl EthereumChain for EmbeddedEthereumChain {
     }
 
     fn is_connected(&self) -> bool {
-        let accounts = self.accounts.lock().unwrap();
-        !accounts.is_empty()
+        self.provider.is_connected_sync() && !self.accounts.lock().unwrap().is_empty()
     }
 
     fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
@@ -464,6 +474,11 @@ pub struct EmbeddedSolanaChain {
 
 impl EmbeddedSolanaChain {
     /// Create a new `EmbeddedSolanaChain` wrapping the given provider.
+    ///
+    /// This does **not** perform initial state synchronisation. Call
+    /// [`sync_public_key`](Self::sync_public_key) after construction (or use
+    /// [`new_initialized`](Self::new_initialized) instead) to eagerly
+    /// populate the public key from the provider.
     pub fn new(provider: Arc<EmbeddedProvider>) -> Self {
         Self {
             provider,
@@ -471,6 +486,16 @@ impl EmbeddedSolanaChain {
             public_key: Mutex::new(None),
             events: EventListenerRegistry::new(),
         }
+    }
+
+    /// Create a new `EmbeddedSolanaChain` and synchronise initial state.
+    ///
+    /// This is the async equivalent of the TypeScript constructor which calls
+    /// `syncInitialState()` to eagerly populate the public key from the provider.
+    pub async fn new_initialized(provider: Arc<EmbeddedProvider>) -> Self {
+        let chain = Self::new(provider);
+        chain.sync_public_key().await;
+        chain
     }
 
     /// Synchronise public key from the provider.
@@ -524,7 +549,7 @@ impl SolanaChain for EmbeddedSolanaChain {
     }
 
     async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.provider.disconnect(false).await?;
+        self.provider.disconnect(true).await?;
         *self.public_key.lock().unwrap() = None;
         self.events.emit("disconnect", serde_json::Value::Null);
         Ok(())

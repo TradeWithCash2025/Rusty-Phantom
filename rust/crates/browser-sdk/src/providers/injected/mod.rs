@@ -163,9 +163,9 @@ impl EventListenerRegistry {
 pub struct InjectedProvider {
     address_types: Vec<AddressFormat>,
     wallet_registry: Arc<InjectedWalletRegistry>,
-    selected_wallet_id: RwLock<Option<String>>,
-    wallet_states: RwLock<HashMap<String, WalletState>>,
-    event_registry: EventListenerRegistry,
+    selected_wallet_id: Arc<RwLock<Option<String>>>,
+    wallet_states: Arc<RwLock<HashMap<String, WalletState>>>,
+    event_registry: Arc<EventListenerRegistry>,
     /// Track which wallet IDs have had event listeners set up.
     event_listeners_setup: Mutex<HashSet<String>>,
     /// Store chain-level listener IDs for cleanup, keyed by wallet ID.
@@ -204,9 +204,9 @@ impl InjectedProvider {
         Self {
             address_types: config.address_types,
             wallet_registry,
-            selected_wallet_id: RwLock::new(None),
-            wallet_states: RwLock::new(HashMap::new()),
-            event_registry: EventListenerRegistry::new(),
+            selected_wallet_id: Arc::new(RwLock::new(None)),
+            wallet_states: Arc::new(RwLock::new(HashMap::new())),
+            event_registry: Arc::new(EventListenerRegistry::new()),
             event_listeners_setup: Mutex::new(HashSet::new()),
             chain_listener_ids: Mutex::new(HashMap::new()),
             was_connected: RwLock::new(false),
@@ -341,6 +341,74 @@ impl InjectedProvider {
     async fn set_wallet_state(&self, wallet_id: &str, state: WalletState) {
         let mut states = self.wallet_states.write().await;
         states.insert(wallet_id.to_string(), state);
+    }
+
+    /// Update wallet state with new addresses for a specific address type.
+    ///
+    /// Replaces all existing addresses of the given type with the new addresses,
+    /// keeping addresses of other types intact. Mirrors the TypeScript
+    /// `updateWalletAddresses` method.
+    ///
+    /// Returns the updated full list of addresses.
+    fn update_wallet_addresses_sync(
+        wallet_states: &RwLock<HashMap<String, WalletState>>,
+        wallet_id: &str,
+        new_addresses: &[String],
+        address_type: AddressFormat,
+    ) -> Vec<WalletAddress> {
+        let mut states = wallet_states.try_write().unwrap_or_else(|_| {
+            // Fall back: spin until available. In practice the lock is
+            // short-lived so this should never block long.
+            loop {
+                if let Ok(guard) = wallet_states.try_write() {
+                    break guard;
+                }
+                std::thread::yield_now();
+            }
+        });
+        let state = states
+            .entry(wallet_id.to_string())
+            .or_insert_with(WalletState::default);
+
+        // Keep addresses of other types, replace same-type addresses.
+        let other_addresses: Vec<WalletAddress> = state
+            .addresses
+            .iter()
+            .filter(|a| a.address_type != address_type)
+            .cloned()
+            .collect();
+        let typed_addresses: Vec<WalletAddress> = new_addresses
+            .iter()
+            .map(|addr| WalletAddress {
+                address_type: address_type.clone(),
+                address: addr.clone(),
+            })
+            .collect();
+
+        let mut updated = other_addresses;
+        updated.extend(typed_addresses);
+
+        state.connected = !updated.is_empty();
+        state.addresses = updated.clone();
+
+        updated
+    }
+
+    /// Remove addresses of a specific type from the wallet state (sync).
+    ///
+    /// Used by disconnect / accountChanged(null) handlers to strip a chain's
+    /// addresses and update connected status.
+    fn remove_addresses_of_type_sync(
+        wallet_states: &RwLock<HashMap<String, WalletState>>,
+        wallet_id: &str,
+        address_type: AddressFormat,
+    ) {
+        if let Ok(mut states) = wallet_states.try_write() {
+            if let Some(state) = states.get_mut(wallet_id) {
+                state.addresses.retain(|a| a.address_type != address_type);
+                state.connected = !state.addresses.is_empty();
+            }
+        }
     }
 
     /// Get the selected wallet ID (async).
@@ -682,12 +750,39 @@ impl InjectedProvider {
         let mut new_entries: Vec<ChainListenerEntry> = Vec::new();
 
         if let Some(ref providers) = wallet_info.providers {
+            // Clone Arc-wrapped fields so closures can capture them.
+            let ws = self.wallet_states.clone();
+            let er = self.event_registry.clone();
+            let swid = self.selected_wallet_id.clone();
+
             // --- Solana event listeners ---
             if self.address_types.contains(&AddressFormat::Solana) {
                 if let Some(ref solana_provider) = providers.solana {
+                    // Solana connect handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
+                    let swid_c = swid.clone();
                     let lid = solana_provider.on(
                         "connect",
-                        Box::new(|_data| {}),
+                        Box::new(move |data| {
+                            let public_key = data.as_str().unwrap_or("").to_string();
+                            debug!(wallet_id = %wid, public_key = %public_key, "Solana connect event received");
+                            if !public_key.is_empty() {
+                                let new_addrs = Self::update_wallet_addresses_sync(
+                                    &ws_c, &wid, &[public_key], AddressFormat::Solana,
+                                );
+                                let sel = swid_c.try_read().ok().and_then(|g| g.clone());
+                                er_c.emit("connect", serde_json::json!({
+                                    "addresses": new_addrs.iter().map(|a| serde_json::json!({
+                                        "addressType": format!("{:?}", a.address_type),
+                                        "address": a.address,
+                                    })).collect::<Vec<_>>(),
+                                    "source": "wallet",
+                                    "walletId": sel,
+                                }));
+                            }
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "connect".to_string(),
@@ -695,9 +790,21 @@ impl InjectedProvider {
                         chain: ChainKind::Solana,
                     });
 
+                    // Solana disconnect handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
                     let lid = solana_provider.on(
                         "disconnect",
-                        Box::new(|_data| {}),
+                        Box::new(move |_data| {
+                            debug!(wallet_id = %wid, "Solana disconnect event received");
+                            Self::remove_addresses_of_type_sync(
+                                &ws_c, &wid, AddressFormat::Solana,
+                            );
+                            er_c.emit("disconnect", serde_json::json!({
+                                "source": "wallet",
+                            }));
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "disconnect".to_string(),
@@ -705,9 +812,39 @@ impl InjectedProvider {
                         chain: ChainKind::Solana,
                     });
 
+                    // Solana accountChanged handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
+                    let swid_c = swid.clone();
                     let lid = solana_provider.on(
                         "accountChanged",
-                        Box::new(|_data| {}),
+                        Box::new(move |data| {
+                            // data can be a string (new public key) or null (disconnected)
+                            let public_key = data.as_str().map(|s| s.to_string());
+                            debug!(wallet_id = %wid, ?public_key, "Solana account changed event received");
+                            if let Some(pk) = public_key {
+                                let new_addrs = Self::update_wallet_addresses_sync(
+                                    &ws_c, &wid, &[pk], AddressFormat::Solana,
+                                );
+                                let sel = swid_c.try_read().ok().and_then(|g| g.clone());
+                                er_c.emit("connect", serde_json::json!({
+                                    "addresses": new_addrs.iter().map(|a| serde_json::json!({
+                                        "addressType": format!("{:?}", a.address_type),
+                                        "address": a.address,
+                                    })).collect::<Vec<_>>(),
+                                    "source": "wallet-account-change",
+                                    "walletId": sel,
+                                }));
+                            } else {
+                                Self::remove_addresses_of_type_sync(
+                                    &ws_c, &wid, AddressFormat::Solana,
+                                );
+                                er_c.emit("disconnect", serde_json::json!({
+                                    "source": "wallet-account-change",
+                                }));
+                            }
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "accountChanged".to_string(),
@@ -720,9 +857,36 @@ impl InjectedProvider {
             // --- Ethereum event listeners ---
             if self.address_types.contains(&AddressFormat::Ethereum) {
                 if let Some(ref ethereum_provider) = providers.ethereum {
+                    // Ethereum connect handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
+                    let swid_c = swid.clone();
                     let lid = ethereum_provider.on(
                         "connect",
-                        Box::new(|_data| {}),
+                        Box::new(move |data| {
+                            // data may be an array of accounts or { chainId: ... }
+                            let accounts: Vec<String> = if let Some(arr) = data.as_array() {
+                                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                            } else {
+                                vec![]
+                            };
+                            debug!(wallet_id = %wid, ?accounts, "Ethereum connect event received");
+                            if !accounts.is_empty() {
+                                let new_addrs = Self::update_wallet_addresses_sync(
+                                    &ws_c, &wid, &accounts, AddressFormat::Ethereum,
+                                );
+                                let sel = swid_c.try_read().ok().and_then(|g| g.clone());
+                                er_c.emit("connect", serde_json::json!({
+                                    "addresses": new_addrs.iter().map(|a| serde_json::json!({
+                                        "addressType": format!("{:?}", a.address_type),
+                                        "address": a.address,
+                                    })).collect::<Vec<_>>(),
+                                    "source": "wallet",
+                                    "walletId": sel,
+                                }));
+                            }
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "connect".to_string(),
@@ -730,9 +894,21 @@ impl InjectedProvider {
                         chain: ChainKind::Ethereum,
                     });
 
+                    // Ethereum disconnect handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
                     let lid = ethereum_provider.on(
                         "disconnect",
-                        Box::new(|_data| {}),
+                        Box::new(move |_data| {
+                            debug!(wallet_id = %wid, "Ethereum disconnect event received");
+                            Self::remove_addresses_of_type_sync(
+                                &ws_c, &wid, AddressFormat::Ethereum,
+                            );
+                            er_c.emit("disconnect", serde_json::json!({
+                                "source": "wallet",
+                            }));
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "disconnect".to_string(),
@@ -740,9 +916,42 @@ impl InjectedProvider {
                         chain: ChainKind::Ethereum,
                     });
 
+                    // Ethereum accountsChanged handler
+                    let wid = wallet_id.clone();
+                    let ws_c = ws.clone();
+                    let er_c = er.clone();
+                    let swid_c = swid.clone();
                     let lid = ethereum_provider.on(
                         "accountsChanged",
-                        Box::new(|_data| {}),
+                        Box::new(move |data| {
+                            let accounts: Vec<String> = if let Some(arr) = data.as_array() {
+                                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                            } else {
+                                vec![]
+                            };
+                            debug!(wallet_id = %wid, ?accounts, "Ethereum accounts changed event received");
+                            if !accounts.is_empty() {
+                                let new_addrs = Self::update_wallet_addresses_sync(
+                                    &ws_c, &wid, &accounts, AddressFormat::Ethereum,
+                                );
+                                let sel = swid_c.try_read().ok().and_then(|g| g.clone());
+                                er_c.emit("connect", serde_json::json!({
+                                    "addresses": new_addrs.iter().map(|a| serde_json::json!({
+                                        "addressType": format!("{:?}", a.address_type),
+                                        "address": a.address,
+                                    })).collect::<Vec<_>>(),
+                                    "source": "wallet-account-change",
+                                    "walletId": sel,
+                                }));
+                            } else {
+                                Self::remove_addresses_of_type_sync(
+                                    &ws_c, &wid, AddressFormat::Ethereum,
+                                );
+                                er_c.emit("disconnect", serde_json::json!({
+                                    "source": "wallet-account-change",
+                                }));
+                            }
+                        }),
                     );
                     new_entries.push(ChainListenerEntry {
                         event: "accountsChanged".to_string(),

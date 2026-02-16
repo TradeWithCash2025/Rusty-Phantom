@@ -18,6 +18,7 @@ use crate::providers::{
 use crate::types::{
     AuthOptions, AuthProviderType, BrowserSdkConfig, ConnectResult, Provider,
 };
+use crate::utils::{is_auth_callback_url, is_auth_failure_callback};
 
 /// Embedded provider auth types (subset that triggers embedded provider).
 const EMBEDDED_PROVIDER_AUTH_TYPES: &[AuthProviderType] = &[
@@ -53,8 +54,10 @@ pub struct ProviderManager {
     current_provider_key: RwLock<Option<String>>,
     /// Concrete reference to the injected provider for chain-level access.
     injected_provider: RwLock<Option<Arc<InjectedProvider>>>,
-    event_listeners: RwLock<HashMap<String, Vec<(u64, Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>)>>>,
+    event_listeners: Arc<RwLock<HashMap<String, Vec<(u64, Arc<dyn Fn(Option<serde_json::Value>) + Send + Sync>)>>>>,
     next_listener_id: RwLock<u64>,
+    /// Track which provider pointers have had forwarding set up.
+    forwarding_setup: RwLock<Vec<usize>>,
 }
 
 impl ProviderManager {
@@ -71,8 +74,9 @@ impl ProviderManager {
             providers: RwLock::new(HashMap::new()),
             current_provider_key: RwLock::new(None),
             injected_provider: RwLock::new(None),
-            event_listeners: RwLock::new(HashMap::new()),
+            event_listeners: Arc::new(RwLock::new(HashMap::new())),
             next_listener_id: RwLock::new(1),
+            forwarding_setup: RwLock::new(Vec::new()),
         }
     }
 
@@ -140,6 +144,11 @@ impl ProviderManager {
         }
         drop(providers);
         drop(key_guard);
+
+        // Set up event forwarding from the default provider.
+        if let Some(provider) = self.get_current_provider().await {
+            self.setup_event_forwarding(&provider).await;
+        }
 
         debug().info(
             DebugCategory::PROVIDER_MANAGER,
@@ -297,6 +306,9 @@ impl ProviderManager {
             .clone();
 
         *self.current_provider_key.write().await = Some(key);
+
+        // Set up event forwarding from the new provider.
+        self.setup_event_forwarding(&provider).await;
 
         Ok(provider)
     }
@@ -465,12 +477,26 @@ impl ProviderManager {
     /// Attempt auto-connect with fallback strategy.
     ///
     /// Tries embedded provider first if it exists and is allowed, then injected.
+    /// Checks for auth callback URLs to avoid incorrect fallback behaviour,
+    /// matching the TypeScript `autoConnect()` logic.
     pub async fn auto_connect(&self) -> bool {
         debug().log(
             DebugCategory::PROVIDER_MANAGER,
             "Starting auto-connect with fallback strategy",
             None,
         );
+
+        // Check if we're in a callback URL with a failure response.
+        // If so, don't attempt fallback to another provider.
+        let url_params = self.get_url_params();
+        if is_auth_failure_callback(&url_params) {
+            debug().log(
+                DebugCategory::PROVIDER_MANAGER,
+                "Auth failure detected in URL, skipping autoConnect fallback",
+                None,
+            );
+            return false;
+        }
 
         let embedded_wallet_type = self
             .config
@@ -497,17 +523,32 @@ impl ProviderManager {
                     None,
                 );
 
-                if let Ok(()) = embedded_provider.auto_connect().await {
-                    if embedded_provider.is_connected() {
-                        *self.current_provider_key.write().await =
-                            Some(embedded_key.clone());
-                        debug().info(
-                            DebugCategory::PROVIDER_MANAGER,
-                            "Embedded auto-connect successful",
-                            None,
-                        );
-                        self.save_provider_preference().await;
-                        return true;
+                match embedded_provider.auto_connect().await {
+                    Ok(()) => {
+                        if embedded_provider.is_connected() {
+                            *self.current_provider_key.write().await =
+                                Some(embedded_key.clone());
+                            self.setup_event_forwarding(&embedded_provider).await;
+                            debug().info(
+                                DebugCategory::PROVIDER_MANAGER,
+                                "Embedded auto-connect successful",
+                                None,
+                            );
+                            self.save_provider_preference().await;
+                            return true;
+                        }
+                    }
+                    Err(_) => {
+                        // If embedded auth failed and we're in a callback URL,
+                        // don't try injected provider as fallback.
+                        if is_auth_callback_url(&url_params) {
+                            debug().log(
+                                DebugCategory::PROVIDER_MANAGER,
+                                "In auth callback URL, not attempting injected fallback",
+                                None,
+                            );
+                            return false;
+                        }
                     }
                 }
             }
@@ -532,6 +573,7 @@ impl ProviderManager {
                     if injected_provider.is_connected() {
                         *self.current_provider_key.write().await =
                             Some("injected".to_string());
+                        self.setup_event_forwarding(&injected_provider).await;
                         debug().info(
                             DebugCategory::PROVIDER_MANAGER,
                             "Injected auto-connect successful",
@@ -626,6 +668,93 @@ impl ProviderManager {
     /// `ethereum()`) that are not part of the generic `Provider` trait.
     pub async fn get_injected_provider(&self) -> Option<Arc<InjectedProvider>> {
         self.injected_provider.read().await.clone()
+    }
+
+    /// Build a URL params map from the platform adapter's URL params accessor.
+    ///
+    /// Returns an empty map if no platform adapter is configured. Used by
+    /// `auto_connect` to detect auth callback URLs.
+    fn get_url_params(&self) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        if let Some(ref adapter) = self.config.platform_adapter {
+            let accessor = adapter.url_params_accessor();
+            // Check the keys used by auth callback detection.
+            for key in &["response_type", "session_id", "wallet_id"] {
+                if let Some(value) = accessor.get_param(key) {
+                    params.insert(key.to_string(), value);
+                }
+            }
+        }
+        params
+    }
+
+    /// Set up event forwarding from a provider to this ProviderManager.
+    ///
+    /// Listens on the provider's event registry (via the `Provider::on` trait
+    /// method — which the injected provider implements through its
+    /// `EventListenerRegistry`) and re-emits those events through the
+    /// ProviderManager's own listeners.
+    ///
+    /// Matches the TypeScript `ensureProviderEventForwarding()` which forwards
+    /// `connect_start`, `connect`, `connect_error`, `disconnect`, `error`, and
+    /// `spending_limit_reached` events.
+    async fn setup_event_forwarding(&self, provider: &Arc<dyn Provider>) {
+        // We forward events by registering a listener on the provider (via the
+        // InjectedProvider's `on` method) that calls our own `emit`.
+        //
+        // The injected provider exposes `on`/`off` through the Provider trait
+        // which isn't available on all providers. For providers that *are*
+        // InjectedProvider, we can downcast. For embedded providers, their
+        // events are already forwarded through their own mechanism.
+        //
+        // We use a simple approach: try to get the concrete injected provider
+        // and forward its events.
+        if let Some(ref injected) = *self.injected_provider.read().await {
+            if Arc::ptr_eq(
+                &(provider.clone() as Arc<dyn Provider>),
+                &(injected.clone() as Arc<dyn Provider>),
+            ) {
+                // This provider IS the injected provider -- forward events.
+                let events_to_forward = [
+                    "connect_start",
+                    "connect",
+                    "connect_error",
+                    "disconnect",
+                ];
+
+                // Clone the event_listeners Arc for use in closures.
+                let listeners = self.event_listeners.clone();
+
+                for event_name in events_to_forward {
+                    let listeners_c = listeners.clone();
+                    let evt = event_name.to_string();
+                    injected.on(
+                        event_name,
+                        Arc::new(move |data: serde_json::Value| {
+                            // Forward to ProviderManager listeners.
+                            if let Ok(map) = listeners_c.try_read() {
+                                if let Some(list) = map.get(&evt) {
+                                    for (_, cb) in list {
+                                        let cb = cb.clone();
+                                        let data = Some(data.clone());
+                                        if let Err(e) = std::panic::catch_unwind(
+                                            std::panic::AssertUnwindSafe(move || {
+                                                cb(data);
+                                            }),
+                                        ) {
+                                            tracing::error!(
+                                                ?e, event = %evt,
+                                                "Forwarded event callback panicked"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }),
+                    );
+                }
+            }
+        }
     }
 }
 

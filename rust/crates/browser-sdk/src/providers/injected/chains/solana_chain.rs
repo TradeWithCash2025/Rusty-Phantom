@@ -52,6 +52,22 @@ impl EventListenerRegistry {
             }
         }
     }
+
+    /// Emit an event, invoking all registered listeners with the given data.
+    fn emit(&self, event: &str, data: serde_json::Value) {
+        let map = self.listeners.lock().unwrap();
+        if let Some(list) = map.get(event) {
+            for (_, cb) in list {
+                let cb = cb.clone();
+                let data = data.clone();
+                if let Err(e) =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || cb(data)))
+                {
+                    tracing::error!("Error in '{}' event listener: {:?}", event, e);
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -78,22 +94,86 @@ pub struct InjectedWalletSolanaChain {
 
 impl InjectedWalletSolanaChain {
     /// Create a new `InjectedWalletSolanaChain` wrapping the given provider.
-    pub fn new(inner: Arc<dyn SolanaChain>, wallet_id: String, wallet_name: String) -> Self {
+    pub fn new(inner: Arc<dyn SolanaChain>, wallet_id: String, wallet_name: String) -> Arc<Self> {
         // Seed the cache from the inner provider.
         let public_key_cache = Mutex::new(inner.public_key().map(|s| s.to_string()));
 
-        Self {
+        let this = Arc::new(Self {
             inner,
             wallet_id,
             wallet_name,
             public_key_cache,
             events: EventListenerRegistry::new(),
-        }
+        });
+
+        this.setup_event_listeners();
+        this
     }
 
     /// Refresh the public key cache from the inner provider.
     fn refresh_public_key_cache(&self) {
         *self.public_key_cache.lock().unwrap() = self.inner.public_key().map(|s| s.to_string());
+    }
+
+    /// Register listeners on the inner provider to update local state and
+    /// re-emit events through our own registry. Mirrors `setupEventListeners`
+    /// in the TypeScript implementation.
+    fn setup_event_listeners(self: &Arc<Self>) {
+        // "connect" -- update public key cache.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "connect",
+                Box::new(move |value| {
+                    // The value may be a string (public key) or an object with a publicKey field.
+                    let pk = value
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            value
+                                .get("publicKey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        });
+                    if let Some(ref key) = pk {
+                        *this.public_key_cache.lock().unwrap() = Some(key.clone());
+                    }
+                    this.events.emit("connect", value);
+                }),
+            );
+        }
+
+        // "disconnect" -- clear public key cache.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "disconnect",
+                Box::new(move |value| {
+                    *this.public_key_cache.lock().unwrap() = None;
+                    this.events.emit("disconnect", value);
+                }),
+            );
+        }
+
+        // "accountChanged" -- update public key cache.
+        {
+            let this = Arc::clone(self);
+            self.inner.on(
+                "accountChanged",
+                Box::new(move |value| {
+                    let pk = value.as_str().map(|s| s.to_string()).or_else(|| {
+                        value
+                            .get("publicKey")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    });
+                    // If the value is null or an empty string, clear the cache.
+                    let pk = pk.filter(|s| !s.is_empty());
+                    *this.public_key_cache.lock().unwrap() = pk;
+                    this.events.emit("accountChanged", value);
+                }),
+            );
+        }
     }
 }
 
@@ -108,7 +188,9 @@ impl SolanaChain for InjectedWalletSolanaChain {
     }
 
     fn is_connected(&self) -> bool {
-        self.inner.is_connected()
+        // Prefer the wrapped provider's state when available, fallback to our
+        // cached key -- mirrors the TS implementation.
+        self.inner.is_connected() || self.public_key_cache.lock().unwrap().is_some()
     }
 
     async fn connect(
@@ -123,6 +205,26 @@ impl SolanaChain for InjectedWalletSolanaChain {
 
         match self.inner.connect(options).await {
             Ok(result) => {
+                // Post-connect validation: verify the provider reports connected
+                // and that we got a non-empty public key.
+                if !self.inner.is_connected() {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "Provider not connected after connect() call"
+                    );
+                    return Err("Provider not connected after connect() call".into());
+                }
+
+                if result.public_key.is_empty() {
+                    tracing::error!(
+                        wallet_id = %self.wallet_id,
+                        wallet_name = %self.wallet_name,
+                        "Empty publicKey from provider"
+                    );
+                    return Err("Empty publicKey from provider".into());
+                }
+
                 *self.public_key_cache.lock().unwrap() = Some(result.public_key.clone());
                 tracing::info!(
                     wallet_id = %self.wallet_id,
@@ -192,7 +294,21 @@ impl SolanaChain for InjectedWalletSolanaChain {
                     signature_length = result.signature.len(),
                     "External wallet Solana signMessage success"
                 );
-                Ok(result)
+                // Normalize: if the result's publicKey is empty, fall back to
+                // our cached publicKey (mirrors TS `result.publicKey || this._publicKey || ""`).
+                let public_key = if result.public_key.is_empty() {
+                    self.public_key_cache
+                        .lock()
+                        .unwrap()
+                        .clone()
+                        .unwrap_or_default()
+                } else {
+                    result.public_key
+                };
+                Ok(SolanaSignMessageResult {
+                    signature: result.signature,
+                    public_key,
+                })
             }
             Err(e) => {
                 tracing::error!(
@@ -369,19 +485,13 @@ impl SolanaChain for InjectedWalletSolanaChain {
     }
 
     fn on(&self, event: &str, listener: Box<dyn Fn(serde_json::Value) + Send + Sync>) -> u64 {
-        // Register on both the local registry and the inner provider so that
-        // events emitted by either side reach the caller.
-        let local_id = self.events.add(event, listener);
-        // Forward to inner provider as well.
-        let inner_listener: Box<dyn Fn(serde_json::Value) + Send + Sync> =
-            Box::new(|_| { /* forwarded via inner */ });
-        let _inner_id = self.inner.on(event, inner_listener);
-        local_id
+        // Register on the local registry only.  Events from the inner provider
+        // are forwarded to local listeners via `setup_event_listeners`, so
+        // callers receive events regardless of origin.
+        self.events.add(event, listener)
     }
 
     fn off(&self, event: &str, listener_id: u64) {
         self.events.remove(event, listener_id);
-        // Also forward removal to inner provider.
-        self.inner.off(event, listener_id);
     }
 }
